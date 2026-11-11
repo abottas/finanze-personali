@@ -71,7 +71,7 @@ export function forecast(state, today, days = state.settings.forecastDays) {
   events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   const points = [];
-  let tP = snap.total, fP = snap.free, tO = snap.total, fO = snap.free;
+  let tP = snap.liquid, fP = snap.free, tO = snap.liquid, fO = snap.free;   // la tasca di investimento non è liquidità
   let ei = 0;
   for (let d = 0; d <= days; d++) {
     const date = addDays(today, d);
@@ -120,5 +120,5 @@ export function forecast(state, today, days = state.settings.forecastDays) {
 
   let minFree = points[0]?.free ?? 0, minFreeDate = points[0]?.date ?? today;
   for (const p of points) if (p.free < minFree) { minFree = p.free; minFreeDate = p.date; }
-  return { points, events, issues, minFree, minFreeDate, start: { total: snap.total, free: snap.free } };
+  return { points, events, issues, minFree, minFreeDate, start: { total: snap.liquid, free: snap.free } };
 }

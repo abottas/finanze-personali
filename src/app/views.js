@@ -37,22 +37,34 @@ export function moneyMap(app, snap) {
   const st = app.state;
   const funds = st.funds.filter((f) => !f.archived);
   const name = (id) => st.accounts.find((x) => x.id === id)?.name ?? '—';
+  const active = st.accounts.filter((a) => !a.archived);
+  // Un blocco per conto ("tasca"). I conti della stessa banca (es. Tasse + PAC) si raggruppano sotto un'unica intestazione.
+  const block = (a, nested = false) => {
+    const bal = snap.balances[a.id], free = snap.freeByAccount[a.id];
+    const inv = a.type === 'investment';
+    const at = (f) => snap.funds[f.id].byAccount[a.id] ?? 0;       // quanto di QUESTO conto è riservato al fondo (virtuale)
+    const fl = inv ? [] : funds.filter((f) => at(f) > 0 || (f.accountId === a.id && (f.kind === 'goal' || f.kind === 'tax')));
+    const denom = Math.max(bal, fl.reduce((t, f) => t + Math.max(0, at(f)), 0), 1);
+    const w = (c) => ((Math.max(0, c) / denom) * 100).toFixed(1);
+    return html`<div class="${nested ? 'pocket' : 'acct'}">
+      <button class="head" data-action="edit-account" data-id="${a.id}">${accountTile(a, nested ? 'sm' : '')}<div class="grow"><div class="t">${a.name}</div><div class="small muted">${a.role ?? (inv ? 'Investito' : 'Saldo bancario')}</div></div><div class="bal num">${a.balanceUnknown ? pill('Da aggiornare', 'warn') : amt(bal)}</div></button>
+      ${a.balanceUnknown ? html`<div class="row between small"><span class="muted">Saldo non ancora inserito</span><button class="btn sm primary inline" data-action="set-balance" data-id="${a.id}">Imposta saldo</button></div>` : ''}
+      ${inv ? html`<div class="frow"><span class="dotc col-navy"></span><span class="nm">Investito · non è liquidità</span><span class="am num">${a.balanceUnknown ? 'da aggiornare' : amt(bal)}</span></div>` : html`
+      ${!a.balanceUnknown && (bal > 0 || fl.length) ? html`<div class="map-bar" aria-hidden="true">${fl.map((f) => html`<i class="col-${f.color}" data-w="${w(at(f))}"></i>`)}<i class="free" data-w="${w(free)}"></i></div>` : ''}
+      ${fl.map((f) => html`<button class="frow" data-action="fund" data-id="${f.id}"><span class="dotc col-${f.color}"></span><span class="nm ellipsis">${f.icon} ${f.name}${f.accountId !== a.id && at(f) > 0 ? html` ${pill('da trasferire a ' + name(f.accountId), 'warn')}` : ''}</span><span class="am num">${amt(at(f))}</span></button>`)}
+      <div class="frow ${a.balanceUnknown ? '' : free < 0 ? 'bad' : 'free'}"><span class="dotc ${a.balanceUnknown ? 'col-gray' : free < 0 ? 'col-red' : 'col-green'}"></span><span class="nm">${a.balanceUnknown ? 'Libero da spendere' : free < 0 ? 'Vincolato oltre il saldo' : 'Libero da spendere'}</span><span class="am num">${a.balanceUnknown ? 'da aggiornare' : amt(free)}</span></div>`}
+    </div>`;
+  };
+  const groups = [];
+  for (const a of active) {
+    const g = a.bank ? groups.find((x) => x.bank === a.bank) : null;
+    if (g) g.items.push(a); else groups.push({ bank: a.bank, items: [a] });
+  }
   return html`<section class="card">
-    <h2>Dove sono i tuoi soldi <button class="link-btn small" data-action="new-account">+ Conto</button></h2>
-    ${st.accounts.filter((a) => !a.archived).length === 0 ? html`${empty('Nessun conto', 'Parti dalla configurazione guidata o aggiungi un conto.')}<div class="btn-row"><button class="btn primary" data-action="onboarding">Configurazione guidata</button><button class="btn" data-action="new-account">Nuovo conto</button></div>` : st.accounts.filter((a) => !a.archived).map((a) => {
-      const bal = snap.balances[a.id], free = snap.freeByAccount[a.id];
-      const at = (f) => snap.funds[f.id].byAccount[a.id] ?? 0;       // quanto di QUESTO conto è riservato al fondo (virtuale)
-      const fl = funds.filter((f) => at(f) > 0 || (f.accountId === a.id && (f.kind === 'goal' || f.kind === 'tax')));
-      const denom = Math.max(bal, fl.reduce((t, f) => t + Math.max(0, at(f)), 0), 1);
-      const w = (c) => ((Math.max(0, c) / denom) * 100).toFixed(1);
-      return html`<div class="acct">
-        <button class="head" data-action="edit-account" data-id="${a.id}">${accountTile(a)}<div class="grow"><div class="t">${a.name}</div><div class="small muted">${a.role ?? 'Saldo bancario'}</div></div><div class="bal num">${a.balanceUnknown ? pill('Da aggiornare', 'warn') : amt(bal)}</div></button>
-        ${a.balanceUnknown ? html`<div class="row between small"><span class="muted">Saldo non ancora inserito</span><button class="btn sm primary inline" data-action="set-balance" data-id="${a.id}">Imposta saldo</button></div>` : ''}
-        ${!a.balanceUnknown && (bal > 0 || fl.length) ? html`<div class="map-bar" aria-hidden="true">${fl.map((f) => html`<i class="col-${f.color}" data-w="${w(at(f))}"></i>`)}<i class="free" data-w="${w(free)}"></i></div>` : ''}
-        ${fl.map((f) => html`<button class="frow" data-action="fund" data-id="${f.id}"><span class="dotc col-${f.color}"></span><span class="nm ellipsis">${f.icon} ${f.name}${f.accountId !== a.id && at(f) > 0 ? html` ${pill('da trasferire a ' + name(f.accountId), 'warn')}` : ''}</span><span class="am num">${amt(at(f))}</span></button>`)}
-        <div class="frow ${a.balanceUnknown ? '' : free < 0 ? 'bad' : 'free'}"><span class="dotc ${a.balanceUnknown ? 'col-gray' : free < 0 ? 'col-red' : 'col-green'}"></span><span class="nm">${a.balanceUnknown ? 'Libero da spendere' : free < 0 ? 'Vincolato oltre il saldo' : 'Libero da spendere'}</span><span class="am num">${a.balanceUnknown ? 'da aggiornare' : amt(free)}</span></div>
-      </div>`;
-    })}
+    <h2>Dove sono i tuoi soldi <span><button class="link-btn small" data-action="update-balances">Aggiorna saldi</button> <button class="link-btn small" data-action="new-account">+ Conto</button></span></h2>
+    ${active.length === 0 ? html`${empty('Nessun conto', 'Parti dalla configurazione guidata o aggiungi un conto.')}<div class="btn-row"><button class="btn primary" data-action="onboarding">Configurazione guidata</button><button class="btn" data-action="new-account">Nuovo conto</button></div>` : groups.map((g) => g.items.length === 1 ? block(g.items[0]) : html`<div class="acct group">
+      <div class="group-head">${accountTile(g.items[0])}<div class="grow"><div class="t">${BANKS[g.bank]?.name ?? 'Banca'}</div><div class="small muted">${g.items.length} tasche · totale</div></div><div class="bal num">${g.items.some((a) => a.balanceUnknown) ? pill('Da aggiornare', 'warn') : amt(g.items.reduce((t, a) => t + snap.balances[a.id], 0))}</div></div>
+      <div class="pockets">${g.items.map((a) => block(a, true))}</div></div>`)}
   </section>`;
 }
 
@@ -96,7 +108,7 @@ export function viewOverview(app) {
   const bs = budgetStatus(st, today);
   const k = snap.reservedByKind;
   const pos = (n) => Math.max(0, n);
-  const totalPos = pos(snap.free) + pos(k.tax) + pos(k.goal) + pos(k.planned) + pos(k.reserve) || 1;
+  const totalPos = pos(snap.free) + pos(k.tax) + pos(k.goal) + pos(k.planned) + pos(k.reserve) + pos(snap.invested) || 1;
   const w = (n) => ((pos(n) / totalPos) * 100).toFixed(1);
 
   const alerts = [];
@@ -128,11 +140,12 @@ export function viewOverview(app) {
     <section class="card hero">
       <div class="label">Saldo totale dei conti</div>
       <div class="big num">${amt(snap.total)}</div>
-      <div class="stack" aria-hidden="true"><i class="c-free" data-w="${w(snap.free)}"></i><i class="c-tax" data-w="${w(k.tax)}"></i><i class="c-goal" data-w="${w(k.goal)}"></i><i class="c-planned" data-w="${w(k.planned)}"></i><i class="c-reserve" data-w="${w(k.reserve)}"></i></div>
+      <div class="stack" aria-hidden="true"><i class="c-free" data-w="${w(snap.free)}"></i><i class="c-tax" data-w="${w(k.tax)}"></i><i class="c-goal" data-w="${w(k.goal)}"></i><i class="c-planned" data-w="${w(k.planned)}"></i><i class="c-reserve" data-w="${w(k.reserve)}"></i><i class="col-navy" data-w="${w(snap.invested)}"></i></div>
       <div class="stats">
         <div class="stat ${snap.free < 0 ? 'warn' : ''}"><div class="k">Liquidità libera</div><div class="v num">${amt(snap.free)}</div></div>
         <div class="stat"><div class="k">Somme vincolate</div><div class="v num">${amt(snap.reserved)}</div></div>
       </div>
+      ${snap.invested > 0 ? html`<div class="small hero-sub">di cui investito (PAC): ${amt(snap.invested)} · non è liquidità</div>` : ''}
       ${st.accounts.some((a) => a.balanceUnknown && !a.archived) ? html`<div class="hero-note">Totale parziale: ${st.accounts.filter((a) => a.balanceUnknown && !a.archived).length} conti da aggiornare</div>` : ''}
     </section>
     ${alerts.length ? html`<div>${alerts.map((a) => html`<div class="alert ${a.sev === 'high' ? 'high' : ''}">${I.warn}<button class="grow left" data-nav="${a.go}">${a.text}</button>${a.act ? html`<button class="btn sm inline" data-action="${a.act}" data-id="${a.id}">${a.actLabel}</button>` : ''}</div>`)}</div>` : html`<div class="alert ok">${I.check}<span>Nessun problema di liquidità rilevato nei prossimi ${st.settings.forecastDays} giorni.</span></div>`}
@@ -251,7 +264,7 @@ export function viewFunds(app) {
     ${topbar('Fondi', 'Denaro libero, assegnato e già speso', html`<button class="icon-btn" data-action="new-fund" aria-label="Nuovo fondo">${I.plus}</button>`)}
     <section class="card">
       <h2>Per conto</h2>
-      ${st.accounts.length === 0 ? empty('Nessun conto') : html`<ul class="list">${st.accounts.filter((a) => !a.archived).map((a) => {
+      ${st.accounts.length === 0 ? empty('Nessun conto') : html`<ul class="list">${st.accounts.filter((a) => !a.archived && a.type !== 'investment').map((a) => {
         const bal = snap.balances[a.id], res = snap.reservedByAccount[a.id] ?? 0, free = snap.freeByAccount[a.id];
         return html`<li class="item block-item"><div class="row between"><div class="row left">${accountTile(a, 'sm')}<div class="t">${a.name}</div></div><div class="num small muted">Saldo ${amt(bal)}</div></div>
           <div class="bar-wrap">${bar(pctOf(res, Math.max(bal, 1)), free < 0 ? 'neg' : 'planned')}</div>
@@ -354,9 +367,9 @@ export function viewPlan(app) {
       const cat = st.categories.find((c) => c.id === p.categoryId);
       return html`<li class="item"><button class="grow row left" data-action="planned" data-id="${p.id}">
         <span class="tile col-${p.dueDate < today ? 'red' : cat?.color ?? 'gray'}">${KIND_ICON[p.kind]}</span>
-        <div class="grow"><div class="t ellipsis">${p.name}${p.confirm === 'active' ? html` ${pill('da confermare come attiva', 'warn')}` : p.confirm === 'date' ? html` ${pill('data da confermare', 'warn')}` : ''}${p.origin === 'profile' && !p.confirm ? html` ${pill('configurato')}` : ''}</div><div class="s">${p.confirm === 'date' ? 'data indicativa ' : ''}${formatDate(p.dueDate, { year: true })} · ${RECUR_LABEL[p.recurrence]}${p.autoPay ? ' · addebito auto' : ''}${p.kind === 'investment' ? ' · investimento' : ''}${p.confirm ? ' · previsto, non registrato' : ` · ${when(p.dueDate, today)}`}</div>
+        <div class="grow"><div class="t ellipsis">${p.name}${p.confirm === 'active' ? html` ${pill('da confermare come attiva', 'warn')}` : p.confirm === 'date' ? html` ${pill('data da confermare', 'warn')}` : ''}${p.origin === 'profile' && !p.confirm ? html` ${pill('configurato')}` : ''}</div><div class="s">${p.confirm === 'date' ? 'data indicativa ' : ''}${formatDate(p.dueDate, { year: true })} · ${RECUR_LABEL[p.recurrence]}${p.autoPay ? ' · addebito auto' : ''}${p.kind === 'investment' ? ' · investimento' : ''}${p.toAccountId ? ` · ${acc(st, p.accountId)} → ${acc(st, p.toAccountId)}${p.autoExecute ? ' · automatico' : ''}` : ''}${p.confirm ? ' · previsto, non registrato' : ` · ${when(p.dueDate, today)}`}</div>
         ${f ? html`<div class="s">Coperto ${amt(Math.min(cov, p.cents))} / ${amt(p.cents)}</div>` : ''}</div>
-        <div class="r num">${amt(-p.cents)}</div></button>${p.confirm === 'active' ? html`<button class="btn sm primary inline" data-action="confirm-planned" data-id="${p.id}">Conferma</button>` : p.confirm === 'date' ? html`<button class="btn sm inline" data-action="planned" data-id="${p.id}">Imposta data</button>` : html`<button class="btn sm primary inline" data-action="complete-planned" data-id="${p.id}">${p.autoPay ? 'Addebitato' : 'Pagato'} ✓</button>`}</li>`;
+        <div class="r num">${amt(-p.cents)}</div></button>${p.confirm === 'active' ? html`<button class="btn sm primary inline" data-action="confirm-planned" data-id="${p.id}">Conferma</button>` : p.confirm === 'date' ? html`<button class="btn sm inline" data-action="planned" data-id="${p.id}">Imposta data</button>` : html`<button class="btn sm primary inline" data-action="complete-planned" data-id="${p.id}">${p.toAccountId ? 'Eseguito' : p.autoPay ? 'Addebitato' : 'Pagato'} ✓</button>`}</li>`;
     })}</ul>`}</div>
     ${done.length ? html`<div class="small muted done-note">Completati di recente: ${done.map((p) => p.name).join(', ')}</div>` : ''}
   </div>`;
@@ -551,6 +564,7 @@ function settingsStatus(app, back) {
   const funded = st.funds.filter((f) => !f.archived && snap.funds[f.id].available > 0).length;
   const sec = (title, sub) => html`<div class="section-title">${title}</div><div class="small muted status-sub">${sub}</div>`;
   return html`<div class="screen no-tabs">${back}${topbar('Stato dei dati', 'Cosa è configurato, cosa è previsto, cosa devi confermare')}
+    <button class="btn block" data-action="update-balances">Aggiorna i saldi di tutti i conti</button>
     ${sec('1 · Dati configurati', 'Impostazioni di partenza: non sono movimenti. Si modificano senza perdere lo storico.')}
     <div class="card"><div class="kv"><span class="k">Conti</span><span>${st.accounts.filter((a) => !a.archived).length}${st.accounts.some((a) => a.origin === 'profile') ? ' · dal profilo' : ''}</span>
       <span class="k">Fondi e obiettivi</span><span>${st.funds.filter((f) => !f.archived).length} · finanziati: ${funded}</span>

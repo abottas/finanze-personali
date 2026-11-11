@@ -55,13 +55,16 @@ export function snapshot(state) {
     reservedByKind[f.kind] += as - sp;
     reserved += as - sp;
   }
+  // I conti di INVESTIMENTO (es. la tasca PAC) fanno parte del patrimonio ma NON della liquidità: il "libero" non li conta.
   const freeByAccount = {};
-  let total = 0;
+  let total = 0, invested = 0;
   for (const a of state.accounts) {
     total += balances[a.id];
-    freeByAccount[a.id] = balances[a.id] - (reservedByAccount[a.id] ?? 0);
+    if (a.type === 'investment') { invested += balances[a.id]; freeByAccount[a.id] = 0; }
+    else freeByAccount[a.id] = balances[a.id] - (reservedByAccount[a.id] ?? 0);
   }
-  return { balances, funds, reservedByAccount, freeByAccount, reservedByKind, total, reserved, free: total - reserved };
+  const liquid = total - invested;
+  return { balances, funds, reservedByAccount, freeByAccount, reservedByKind, total, invested, liquid, reserved, free: liquid - reserved };
 }
 
 /**

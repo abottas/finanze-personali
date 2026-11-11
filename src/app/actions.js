@@ -17,7 +17,7 @@ import { createBackup, verifyBackup } from '../crypto/backup.js';
 import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { runIntegrityChecks } from '../core/integrity.js';
 
-const ACC_TYPES = [['checking', 'Conto corrente'], ['savings', 'Risparmio'], ['cash', 'Contanti'], ['other', 'Altro']];
+const ACC_TYPES = [['checking', 'Conto corrente'], ['savings', 'Risparmio'], ['cash', 'Contanti'], ['investment', 'Investimento (PAC) · non è liquidità'], ['other', 'Altro']];
 const PRIORITY = [['1', 'Alta'], ['2', 'Media'], ['3', 'Bassa']];
 const RECUR = [['none', 'Una tantum'], ['weekly', 'Ogni settimana'], ['monthly', 'Ogni mese'], ['quarterly', 'Ogni 3 mesi'], ['yearly', 'Ogni anno']];
 const PKINDS = [['subscription', 'Abbonamento / spesa fissa'], ['renewal', 'Rinnovo / scadenza'], ['investment', 'Investimento (PAC)'], ['purchase', 'Acquisto'], ['extraordinary', 'Spesa straordinaria']];
@@ -37,7 +37,10 @@ const optDate = (v) => (v ? v : null);
 export function createActions(api) {
   const { app } = api;
   const st = () => app.state;
-  const accOpts = (all = false) => st().accounts.filter((a) => all || !a.archived).map((a) => [a.id, a.name]);
+  // I conti di investimento (tasca PAC) non sono liquidità: non compaiono dove servono denaro spendibile (spese, incassi, fondi).
+  const accOpts = (all = false) => st().accounts.filter((a) => (all || !a.archived) && a.type !== 'investment').map((a) => [a.id, a.name]);
+  const accOptsAny = () => st().accounts.filter((a) => !a.archived).map((a) => [a.id, a.name]);
+  const investOpts = () => st().accounts.filter((a) => !a.archived && a.type === 'investment').map((a) => [a.id, a.name]);
   const catOpts = (kind) => st().categories.filter((c) => c.kind === kind).map((c) => [c.id, c.name]);
   void 0;
   const fundOpts = () => [['', 'Nessuno'], ...st().funds.filter((f) => !f.archived).map((f) => [f.id, `${f.name} · ${st().accounts.find((a) => a.id === f.accountId)?.name ?? ''}`])];
@@ -77,7 +80,7 @@ export function createActions(api) {
         ${moneyField('amount', 'Importo', pre.amount ?? null)}
         ${field('date', 'Data', { type: 'date', value: app.today, attrs: `max="${app.today}" required` })}
         ${select('account', 'Conto', first, first[0]?.[0], { cls: 'not-transfer' })}
-        <div class="only-transfer"><div class="field-row">${select('from', 'Da', first, pre.from ?? first[0]?.[0])}${select('to', 'A', first, pre.to ?? first[1]?.[0] ?? first[0]?.[0])}</div>
+        <div class="only-transfer"><div class="field-row">${select('from', 'Da', accOptsAny(), pre.from ?? first[0]?.[0])}${select('to', 'A', accOptsAny(), pre.to ?? first[1]?.[0] ?? first[0]?.[0])}</div>
           <div class="note">Un trasferimento sposta denaro tra i tuoi conti: non è un'entrata né una spesa.</div>
           ${select('purpose', 'Scopo', [['', 'Nessuno'], ['saving', 'Risparmio']], '')}</div>
         ${select('catExpense', 'Categoria', catOpts('expense'), 'cat_other', { cls: 'only-expense' })}
@@ -272,11 +275,35 @@ export function createActions(api) {
       },
     });
   }
-  function balanceSheet(id) {
-    const a = byId('accounts', id);
-    api.openSheet({ title: `Saldo di ${a.name}`, submit: 'Imposta saldo', body: html`${moneyBankField()}`, onSubmit: async (v) => { await api.commit((s, c) => C.setAccountBalance(s, c, id, money(v.amount, 'Saldo', { zero: true }))); api.toast('Saldo impostato'); } });
+  /** Aggiorna i saldi di tutti i conti insieme, con il saldo reale di oggi: utile anche dopo giorni senza aprire l'app. */
+  function balancesSheet(focusId = null) {
+    const sn = snap();
+    const list = st().accounts.filter((x) => !x.archived);
+    if (!list.length) { api.toast('Nessun conto', true); return; }
+    api.openSheet({
+      title: 'Aggiorna saldi', submit: 'Aggiorna',
+      body: html`<div class="note">Scrivi il saldo di oggi <b>come lo mostra la banca</b> solo per i conti che vuoi aggiornare (gli altri lasciali vuoti). Se un conto ha già movimenti, la differenza viene registrata come <b>rettifica tracciata</b>; se non ne ha, correggi semplicemente il saldo iniziale.</div>
+        ${list.map((a) => html`<label class="field bal-field"><span class="row left">${accountTile(a, 'sm')}<b>${a.name}</b>${a.role ? html` <small class="muted">· ${a.role}</small>` : ''}</span>
+          <input class="money sm" name="b_${a.id}" inputmode="text" autocomplete="off" placeholder="${a.balanceUnknown ? 'Da aggiornare' : formatEuro(sn.balances[a.id], { symbol: false })}" ${a.id === focusId ? raw('data-focus="1"') : ''}>
+          <small class="hint">${a.balanceUnknown ? 'Saldo non ancora inserito.' : `Oggi nell'app: ${formatEuro(sn.balances[a.id])}`}</small></label>`)}`,
+      onSubmit: async (v) => {
+        const items = [];
+        for (const a of list) {
+          const raw_ = String(v['b_' + a.id] ?? '').trim();
+          if (!raw_) continue;
+          const c = parseEuro(raw_);
+          if (c == null) throw new AppError('importo', `Saldo di ${a.name} non valido (usa ad es. 1.234,56; il segno meno per un saldo negativo)`);
+          items.push({ accountId: a.id, balanceCents: c });
+        }
+        if (!items.length) throw new AppError('vuoto', 'Scrivi il saldo di almeno un conto');
+        const out = await api.commit((s, c) => C.updateBalances(s, c, items));
+        const adj = out.filter((x) => x.how === 'adjustment').length;
+        api.toast(out.length === 0 ? 'Nessuna differenza: saldi già allineati' : adj ? `Saldi aggiornati · ${adj} rettifica${adj > 1 ? 'e' : ''} registrata${adj > 1 ? 'e' : ''}` : 'Saldi aggiornati');
+      },
+    });
+    setTimeout(() => sheetRootFocus(), 50);
   }
-  const moneyBankField = () => html`<label class="field"><span>Saldo di oggi secondo la banca</span><input class="money" name="amount" inputmode="text" placeholder="0,00" autocomplete="off" required><small class="hint">Può essere negativo: usa il segno meno. I movimenti già registrati restano com'è.</small></label>`;
+  const sheetRootFocus = () => document.querySelector('.sheet [data-focus="1"]')?.focus();
   /** Conferma di un bonifico GIÀ eseguito in banca: solo qui nasce il trasferimento reale. */
   function confirmTransferSheet({ fundId, from, to, cents }) {
     const f = st().funds.find((x) => x.id === fundId);
@@ -305,12 +332,14 @@ export function createActions(api) {
         ${select('remind', 'Avviso (nel Calendario)', REMIND, String(p?.remindDays ?? 2))}
         <label class="check"><input type="checkbox" name="autoPay" ${p?.autoPay ? raw('checked') : ''}><span>Addebito automatico (devo solo verificarlo)</span></label>
         ${select('priority', 'Priorità', PRIORITY, String(p?.priority ?? 2))}
+        ${investOpts().length ? html`${select('toAccount', 'Versamento su (tasca di investimento)', [['', 'Nessuno: è una spesa o un pagamento'], ...investOpts()], p?.toAccountId ?? '', { hint: 'Es. PAC: i soldi passano dalla tasca Tasse alla tasca PAC (trasferimento interno, non una spesa).' })}
+          <label class="check"><input type="checkbox" name="autoExecute" ${p?.autoExecute ? raw('checked') : ''}><span>Esegui <b>automaticamente</b> alla scadenza (solo se c'è denaro libero sufficiente nella tasca di origine)</span></label>` : ''}
         ${p ? '' : html`${select('account', 'Conto da cui paghi', accs, accs[0]?.[0])}
           ${select('fundMode', 'Copertura', [['none', 'Nessun fondo (pesa sul libero)'], ['new', 'Crea un fondo dedicato'], ...(funds.length ? [['existing', 'Usa un fondo esistente']] : [])], 'none')}
           ${funds.length ? select('fund', 'Fondo esistente', funds, funds[0][0]) : ''}`}
         ${p ? html`<button type="button" class="btn danger block" data-action="cancel-planned" data-id="${p.id}">Elimina scadenza</button>` : ''}`,
       onSubmit: async (v) => {
-        const common = { name: v.name, cents: money(v.amount), dueDate: v.due, priority: Number(v.priority), categoryId: v.category, autoPay: v.autoPay === 'on', remindDays: Number(v.remind), recurrence: v.recurrence };
+        const common = { name: v.name, cents: money(v.amount), dueDate: v.due, priority: Number(v.priority), categoryId: v.category, autoPay: v.autoPay === 'on', remindDays: Number(v.remind), recurrence: v.recurrence, toAccountId: v.toAccount || null, autoExecute: v.autoExecute === 'on' };
         if (p) await api.commit((s, c) => C.updatePlanned(s, c, p.id, { ...common }));
         else await api.commit((s, c) => C.addPlanned(s, c, { ...common, kind: v.kind, accountId: v.account, fundMode: v.fundMode, fundId: v.fund || null }));
       },
@@ -321,13 +350,13 @@ export function createActions(api) {
     const f = st().funds.find((x) => x.id === p.fundId);
     const avail = f ? snap().funds[f.id].available : 0;
     api.openSheet({
-      title: `${p.autoPay ? 'Conferma addebito' : 'Segna pagato'}: ${p.name}`, submit: p.autoPay ? 'Confermo addebito' : 'Segna pagato',
+      title: p.toAccountId ? `Versamento: ${p.name}` : `${p.autoPay ? 'Conferma addebito' : 'Segna pagato'}: ${p.name}`, submit: p.toAccountId ? 'Registra versamento' : p.autoPay ? 'Confermo addebito' : 'Segna pagato',
       body: html`${moneyField('amount', 'Importo pagato', p.cents)}${field('date', 'Data', { type: 'date', value: app.today, attrs: `max="${app.today}" required` })}
-        ${select('account', 'Conto', accOpts(), p.accountId)}${select('cat', 'Categoria', [...catOpts('expense'), ...catOpts('investment')], p.categoryId ?? 'cat_other')}
+        ${select('account', p.toAccountId ? 'Da quale tasca' : 'Conto', accOpts(), p.accountId)}${p.toAccountId ? html`<div class="note">Trasferimento <b>interno</b> verso <b>${st().accounts.find((a) => a.id === p.toAccountId)?.name}</b>: non è una spesa. Riduce la liquidità e aumenta l'investito.</div>` : select('cat', 'Categoria', [...catOpts('expense'), ...catOpts('investment')], p.categoryId ?? 'cat_other')}
         ${f ? html`<label class="check"><input type="checkbox" name="useFund" ${avail > 0 ? raw('checked') : ''}><span>Paga dal fondo "${f.name}" (disponibili ${formatEuro(avail)})</span></label>` : ''}
         <div class="note">${p.kind === 'investment' ? 'È un investimento (PAC): riduce la liquidità ma non è una spesa di consumo. ' : ''}${p.recurrence === 'none' ? 'È una scadenza singola: verrà chiusa.' : `Scadenza ${RECUR_LABEL[p.recurrence]}: dopo il pagamento passa automaticamente alla successiva.`}</div>`,
       onSubmit: async (v) => {
-        await api.commit((s, c) => C.completePlanned(s, c, { id, date: v.date, cents: money(v.amount), accountId: v.account, categoryId: v.cat, useFund: v.useFund === 'on' }));
+        await api.commit((s, c) => C.completePlanned(s, c, { id, date: v.date, cents: money(v.amount), accountId: v.account, categoryId: v.cat || null, useFund: v.useFund === 'on' }));
         api.toast('Pagamento registrato ✓');
       },
     });
@@ -629,7 +658,8 @@ export function createActions(api) {
       api.openSheet({ title: `Rilascia da ${f.name}`, submit: 'Rilascia', body: html`${select('account', 'Su quale conto', opts, opts[0][0])}${moneyField('amount', 'Importo da liberare')}`,
         onSubmit: async (v) => { await api.commit((s, cx) => C.releaseFromFund(s, cx, f.id, money(v.amount), '', v.account)); api.toast('Importo rilasciato'); } });
     },
-    'set-balance': (el) => balanceSheet(el.dataset.id),
+    'set-balance': (el) => balancesSheet(el.dataset.id),
+    'update-balances': () => balancesSheet(),
     'confirm-planned': (el) => { const p = byId('planned', el.dataset.id); confirmSheet({ title: `Conferma: ${p.name}`, text: `È una voce attiva (${formatEuro(p.cents)})? Se la confermi entra nelle previsioni e negli avvisi. Se non è attiva viene annullata.`, label: 'Sì, è attiva', run: async () => { await api.commit((s, c) => C.confirmPlanned(s, c, p.id, true)); } }); },
     'verify-rates': () => { const y = Number(app.today.slice(0, 4)); confirmSheet({ title: `Aliquote ${y} verificate?`, text: 'Conferma solo dopo aver controllato aliquota INPS Gestione Separata, coefficiente e imposta sostitutiva validi per l\'anno.', label: 'Le ho verificate', run: async () => { await api.commit((s, c) => C.verifyTaxRates(s, c, y)); } }); },
     'close-receivable': (el) => confirmSheet({ title: 'Chiudi con quanto incassato', text: 'La fattura diventa definitiva con il totale già incassato. La riserva accantonata fin qui resta com\'è.', label: 'Chiudi', run: async () => { await api.commit((s, c) => C.closeReceivable(s, c, el.dataset.id)); } }),

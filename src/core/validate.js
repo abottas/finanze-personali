@@ -37,7 +37,7 @@ export function validateState(st) {
     if (!isStr(a.name, 80) || !a.name.trim()) bad(`conto ${a.id}: nome non valido`);
     if (!isCents(a.openingCents)) bad(`conto ${a.id}: saldo iniziale non valido`);
     if (!isDate(a.openingDate)) bad(`conto ${a.id}: data iniziale non valida`);
-    if (!['checking', 'savings', 'cash', 'other'].includes(a.type)) bad(`conto ${a.id}: tipo non valido`);
+    if (!['checking', 'savings', 'cash', 'investment', 'other'].includes(a.type)) bad(`conto ${a.id}: tipo non valido`);
     if (!okColor(a.color) || !okIcon(a.emoji)) bad(`conto ${a.id}: aspetto non valido`);
     if (a.bank != null && !isStr(a.bank, 40)) bad(`conto ${a.id}: banca non valida`);
     if (a.role != null && !isStr(a.role, 80)) bad(`conto ${a.id}: ruolo non valido`);
@@ -70,7 +70,8 @@ export function validateState(st) {
     if (t.fromAccountId === t.toAccountId) bad(`trasferimento ${t.id}: stesso conto`);
     if (!isCents(t.cents) || t.cents <= 0) bad(`trasferimento ${t.id}: importo non valido`);
     if (!isDate(t.date)) bad(`trasferimento ${t.id}: data non valida`);
-    if (t.purpose != null && !['fund', 'saving'].includes(t.purpose)) bad(`trasferimento ${t.id}: scopo non valido`);
+    if (t.purpose != null && !['fund', 'saving', 'investment'].includes(t.purpose)) bad(`trasferimento ${t.id}: scopo non valido`);
+    if (t.plannedId != null && !has('planned', t.plannedId)) bad(`trasferimento ${t.id}: scadenza inesistente`);
     if (t.fundId != null && !has('funds', t.fundId)) bad(`trasferimento ${t.id}: fondo inesistente`);
     if (!['posted', 'void'].includes(t.status)) bad(`trasferimento ${t.id}: stato non valido`);
   }
@@ -93,6 +94,7 @@ export function validateState(st) {
     if (!has('funds', a.fundId)) bad(`allocazione ${a.id}: fondo inesistente`);
     if (!has('accounts', a.accountId)) bad(`allocazione ${a.id}: conto inesistente`);
     if (a.receivableId != null && !has('receivables', a.receivableId)) bad(`allocazione ${a.id}: incasso inesistente`);
+    if (st.accounts.find((x) => x.id === a.accountId)?.type === 'investment') bad(`allocazione ${a.id}: non si riserva denaro su un conto di investimento`);
     if (!isCents(a.cents) || a.cents === 0) bad(`allocazione ${a.id}: importo non valido`);
     if (!isDate(a.date)) bad(`allocazione ${a.id}: data non valida`);
   }
@@ -138,6 +140,11 @@ export function validateState(st) {
     if (!Number.isInteger(p.remindDays) || p.remindDays < 0 || p.remindDays > 30) bad(`acquisto ${p.id}: promemoria non valido`);
     if (!['planned', 'done', 'cancelled'].includes(p.status)) bad(`acquisto ${p.id}: stato non valido`);
     if (p.fundId != null && !has('funds', p.fundId)) bad(`acquisto ${p.id}: fondo inesistente`);
+    if (p.toAccountId != null) {
+      const to = st.accounts.find((x) => x.id === p.toAccountId);
+      if (!to || to.type !== 'investment' || p.toAccountId === p.accountId) bad(`acquisto ${p.id}: la destinazione deve essere un conto di investimento diverso dall'origine`);
+    }
+    if (typeof p.autoExecute !== 'boolean' || (p.autoExecute && p.toAccountId == null)) bad(`acquisto ${p.id}: esecuzione automatica non valida`);
   }
   for (const r of st.reconciliations) {
     if (!has('accounts', r.accountId) || !isDate(r.date) || !isCents(r.bankCents)) bad(`quadratura ${r.id} non valida`);

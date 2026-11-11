@@ -97,7 +97,7 @@ export function migrateState(st) {
   for (const a of st.accounts ?? []) { a.bank ??= null; a.color ??= null; a.emoji ??= null; a.logo ??= null; a.role ??= null; a.balanceUnknown ??= false; a.origin ??= null; }
   for (const f of st.funds ?? []) { f.color ??= { tax: 'amber', goal: 'indigo', planned: 'purple', reserve: 'gray' }[f.kind] ?? 'gray'; f.icon ??= { tax: '🧾', goal: '⭐', planned: '🛍️', reserve: '💰' }[f.kind] ?? '💰'; f.parentId ??= null; f.provisional ??= false; f.origin ??= null; if (f.goal) { f.goal.minCents ??= null; } }
   delete st.settings.taxProfile.deductInps; // la deduzione dei contributi si calcola sul dato annuale reale, non per singola fattura
-  for (const t of st.transfers ?? []) { t.purpose ??= null; t.fundId ??= null; }
+  for (const t of st.transfers ?? []) { t.purpose ??= null; t.fundId ??= null; t.plannedId ??= null; }
   // Gli investimenti (PAC) non sono spese di consumo: cambiano tipo di movimento.
   const inv = (st.categories ?? []).find((c) => c.id === 'cat_invest'); if (inv) inv.kind = 'investment';
   for (const t of st.transactions ?? []) if (t.kind === 'expense' && t.categoryId === 'cat_invest' && !t.fundId) t.kind = 'investment';
@@ -106,6 +106,6 @@ export function migrateState(st) {
   for (const r of st.receivables ?? []) { r.templateKey ??= null; r.invoiceDate ??= null; r.reserveCents ??= null; }
   for (const t of st.invoiceTemplates ?? []) { t.reserveCents ??= null; t.review ??= false; t.note ??= ''; t.origin ??= null; }
   st.settings.taxProfile.verifiedYear ??= null;
-  for (const p of st.planned ?? []) { p.categoryId ??= 'cat_other'; p.autoPay ??= false; p.remindDays ??= 2; p.confirm ??= null; p.origin ??= null; }
+  for (const p of st.planned ?? []) { p.categoryId ??= 'cat_other'; p.autoPay ??= false; p.remindDays ??= 2; p.confirm ??= null; p.origin ??= null; p.toAccountId ??= null; p.autoExecute ??= false; }
   return st;
 }

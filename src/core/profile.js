@@ -24,6 +24,7 @@ export function validateProfile(p) {
     if (!optStr(a.role, 80)) bad(`conto ${a.key}: ruolo troppo lungo`);
     if (a.color != null && !COLOR_KEYS.includes(a.color)) bad(`conto ${a.key}: colore non valido`);
     if (a.openingCents != null && !isCents(a.openingCents)) bad(`conto ${a.key}: saldo non valido`);
+    if (a.type != null && !['checking', 'savings', 'cash', 'investment', 'other'].includes(a.type)) bad(`conto ${a.key}: tipo non valido`);
   }
   const fk = keys(p.funds ?? [], 'fondo');
   for (const f of p.funds ?? []) {
@@ -61,6 +62,12 @@ export function validateProfile(p) {
     if (!acc.has(x.accountKey)) bad(`scadenza ${x.name}: conto inesistente`);
     if (x.confirm != null && !['active', 'date'].includes(x.confirm)) bad(`scadenza ${x.name}: conferma non valida`);
     if (x.dueDay != null && (!Number.isInteger(x.dueDay) || x.dueDay < 1 || x.dueDay > 28)) bad(`scadenza ${x.name}: giorno non valido`);
+    if (x.toAccountKey != null) {
+      const dest = (p.accounts ?? []).find((a) => a.key === x.toAccountKey);
+      if (!dest || dest.type !== 'investment') bad(`scadenza ${x.name}: la destinazione deve essere un conto di tipo investment`);
+      if (x.toAccountKey === x.accountKey) bad(`scadenza ${x.name}: origine e destinazione coincidono`);
+    }
+    if (x.autoExecute && x.toAccountKey == null) bad(`scadenza ${x.name}: esecuzione automatica senza destinazione`);
   }
   return P;
 }

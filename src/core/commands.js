@@ -178,7 +178,7 @@ export function addTransfer(state, ctx, { fromAccountId, toAccountId, cents, dat
     req(cents > 0, 'importo', 'L\'importo deve essere positivo');
     req(isDate(date) && date <= ctx.today, 'data_non_valida', 'Data non valida o futura');
     req(date >= a.openingDate && date >= b.openingDate, 'data_prima_apertura', 'La data precede il saldo iniziale di un conto');
-    const t = { id: ctx.newId(), fromAccountId, toAccountId, cents, date, note: cleanNote(note), purpose: ['fund', 'saving'].includes(purpose) ? purpose : null, fundId: null, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
+    const t = { id: ctx.newId(), fromAccountId, toAccountId, cents, date, note: cleanNote(note), purpose: ['fund', 'saving', 'investment'].includes(purpose) ? purpose : null, fundId: null, plannedId: null, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
     s.transfers.push(t);
     log('create', 'transfer', t.id, null, t);
     return t.id;
@@ -248,6 +248,7 @@ export function assignToFund(state, ctx, fundId, cents, note = '', accountId = n
     const f = find(s.funds, fundId, 'Fondo');
     req(!f.archived, 'fondo_archiviato', 'Il fondo è archiviato');
     const acc = find(s.accounts, accountId ?? f.accountId, 'Conto');
+    req(acc.type !== 'investment', 'conto_investimento', 'Non si riserva denaro su un conto di investimento: non è liquidità');
     assertCents(cents);
     req(cents > 0, 'importo', 'L\'importo deve essere positivo');
     const free = snapshot(s).freeByAccount[acc.id];
@@ -328,7 +329,7 @@ export function confirmFundTransfer(state, ctx, { fundId, fromAccountId, toAccou
     req(date >= from.openingDate && date >= to.openingDate, 'data_prima_apertura', 'La data precede il saldo iniziale di un conto');
     const reserved = reserveAt(s, f.id, from.id);
     req(cents <= reserved, 'riserva_insufficiente', `Su ${from.name} il fondo "${f.name}" ha riservato solo ${formatEuro(reserved)}`);
-    const tr = { id: ctx.newId(), fromAccountId: from.id, toAccountId: to.id, cents, date, note: `Bonifico per "${f.name}"`, purpose: 'fund', fundId: f.id, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
+    const tr = { id: ctx.newId(), fromAccountId: from.id, toAccountId: to.id, cents, date, note: `Bonifico per "${f.name}"`, purpose: 'fund', fundId: f.id, plannedId: null, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
     s.transfers.push(tr);
     log('create', 'transfer', tr.id, null, tr, `Bonifico CONFERMATO dall'utente: ${from.name} → ${to.name}`);
     const moveId = ctx.newId();
@@ -361,7 +362,7 @@ export function relocateFund(state, ctx, id, newAccountId) {
       if (acc === to.id || c <= 0) continue;
       const from = find(s.accounts, acc, 'Conto di origine');
       req(ctx.today >= to.openingDate && ctx.today >= from.openingDate, 'data_prima_apertura', 'Un conto non era ancora aperto');
-      const tr = { id: ctx.newId(), fromAccountId: acc, toAccountId: to.id, cents: c, date: ctx.today, note: `Spostamento fondo "${f.name}"`, purpose: 'fund', fundId: f.id, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
+      const tr = { id: ctx.newId(), fromAccountId: acc, toAccountId: to.id, cents: c, date: ctx.today, note: `Spostamento fondo "${f.name}"`, purpose: 'fund', fundId: f.id, plannedId: null, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
       s.transfers.push(tr);
       log('create', 'transfer', tr.id, null, tr, 'Bonifico confermato dall\'utente collegato allo spostamento del fondo');
       const moveId = ctx.newId();
@@ -468,13 +469,13 @@ export function closeReceivable(state, ctx, id, note = '') {
 }
 
 // ───────────────────── Acquisti programmati / spese straordinarie ─────────────────────
-export function addPlanned(state, ctx, { name, kind = 'purchase', cents, dueDate, priority = 2, accountId, fundMode = 'new', fundId = null, recurrence = 'none', categoryId = 'cat_other', autoPay = false, remindDays = 2, confirm = null, origin = null }) {
+export function addPlanned(state, ctx, { name, kind = 'purchase', cents, dueDate, priority = 2, accountId, fundMode = 'new', fundId = null, recurrence = 'none', categoryId = 'cat_other', autoPay = false, remindDays = 2, confirm = null, origin = null, toAccountId = null, autoExecute = false }) {
   return mutate(state, ctx, (s, log) => {
     find(s.accounts, accountId, 'Conto');
     assertCents(cents);
     req(cents > 0, 'importo', 'L\'importo deve essere positivo');
     req(isDate(dueDate), 'data_non_valida', 'Data non valida');
-    const p = { id: ctx.newId(), name: needName(name), kind, cents, dueDate, anchorDay: Number(dueDate.slice(8)), priority, accountId, fundId: null, recurrence, status: 'planned', createdAt: ctx.nowIso, categoryId, autoPay: !!autoPay, remindDays, confirm, origin };
+    const p = { id: ctx.newId(), name: needName(name), kind, cents, dueDate, anchorDay: Number(dueDate.slice(8)), priority, accountId, fundId: null, recurrence, status: 'planned', createdAt: ctx.nowIso, categoryId, autoPay: !!autoPay, remindDays, confirm, origin, toAccountId, autoExecute: !!autoExecute && !!toAccountId };
     if (fundMode === 'new') {
       const f = { id: ctx.newId(), name: `Per: ${p.name}`.slice(0, 80), kind: 'planned', accountId, goal: null, plannedId: p.id, archived: false, createdAt: ctx.nowIso, color: 'purple', icon: '🛍️', parentId: null, provisional: false, origin: null };
       s.funds.push(f);
@@ -503,6 +504,9 @@ export function updatePlanned(state, ctx, id, patch) {
     if (patch.autoPay !== undefined) p.autoPay = !!patch.autoPay;
     if (patch.remindDays !== undefined) p.remindDays = patch.remindDays;
     if (patch.recurrence !== undefined) p.recurrence = patch.recurrence;
+    if (patch.toAccountId !== undefined) p.toAccountId = patch.toAccountId || null;
+    if (patch.autoExecute !== undefined) p.autoExecute = !!patch.autoExecute && !!p.toAccountId;
+    if (!p.toAccountId) p.autoExecute = false;
     log('update', 'planned', id, before, copy(p));
   });
 }
@@ -523,34 +527,68 @@ export function cancelPlanned(state, ctx, id, reason) {
   });
 }
 const MONTHS_STEP = { monthly: 1, quarterly: 3, yearly: 12 };
-export function completePlanned(state, ctx, { id, date = ctx.today, cents, accountId, categoryId = null, useFund = true }) {
+export function completePlanned(state, ctx, { id, date = ctx.today, cents, accountId, categoryId = null, useFund = true, auto = false }) {
   return mutate(state, ctx, (s, log) => {
     const p = find(s.planned, id, 'Acquisto');
     req(p.status === 'planned', 'non_modificabile', 'Acquisto non più attivo');
     const amount = cents ?? p.cents;
     assertCents(amount);
     req(amount > 0, 'importo', 'Importo non valido');
-    const isInvest = p.kind === 'investment';          // un PAC è un investimento, non una spesa di consumo
-    const f = !isInvest && useFund && p.fundId ? s.funds.find((x) => x.id === p.fundId) : null;
-    const t = { id: ctx.newId(), accountId: accountId ?? p.accountId, date, cents: -amount, kind: isInvest ? 'investment' : 'expense', categoryId: categoryId ?? p.categoryId ?? (isInvest ? 'cat_invest' : 'cat_other'), fundId: f ? f.id : null, receivableId: null, plannedId: p.id, note: cleanNote(p.name), status: 'posted', voidReason: null, createdAt: ctx.nowIso, updatedAt: ctx.nowIso };
-    checkTxFields(s, ctx, t);
-    s.transactions.push(t);
-    log('create', 'transaction', t.id, null, t, `Acquisto programmato eseguito: ${p.name}`);
     const before = copy(p);
-    if (p.recurrence === 'none') {
-      p.status = 'done';
-      if (f && f.plannedId === p.id) {
+    const tag = auto ? ' · eseguito automaticamente alla scadenza' : '';
+    let doneId;
+    if (p.toAccountId) {
+      // Trasferimento INTERNO verso una tasca di investimento (es. PAC): non è una spesa e non è una entrata.
+      const from = find(s.accounts, accountId ?? p.accountId, 'Conto di origine');
+      const to = find(s.accounts, p.toAccountId, 'Conto di destinazione');
+      req(to.type === 'investment', 'destinazione', 'La destinazione non è un conto di investimento');
+      req(isDate(date) && date <= ctx.today, 'data_non_valida', 'Data non valida o futura');
+      req(date >= from.openingDate && date >= to.openingDate, 'data_prima_apertura', 'La data precede il saldo iniziale di un conto');
+      const t = { id: ctx.newId(), fromAccountId: from.id, toAccountId: to.id, cents: amount, date, note: cleanNote(p.name), purpose: 'investment', fundId: null, plannedId: p.id, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
+      s.transfers.push(t);
+      doneId = t.id;
+      log('create', 'transfer', t.id, null, t, `Versamento in investimento ${from.name} → ${to.name}: ${p.name}${tag}`);
+    } else {
+      const isInvest = p.kind === 'investment';          // un PAC senza destinazione è un movimento di investimento, non una spesa
+      const f = !isInvest && useFund && p.fundId ? s.funds.find((x) => x.id === p.fundId) : null;
+      const t = { id: ctx.newId(), accountId: accountId ?? p.accountId, date, cents: -amount, kind: isInvest ? 'investment' : 'expense', categoryId: categoryId ?? p.categoryId ?? (isInvest ? 'cat_invest' : 'cat_other'), fundId: f ? f.id : null, receivableId: null, plannedId: p.id, note: cleanNote(p.name), status: 'posted', voidReason: null, createdAt: ctx.nowIso, updatedAt: ctx.nowIso };
+      checkTxFields(s, ctx, t);
+      s.transactions.push(t);
+      doneId = t.id;
+      log('create', 'transaction', t.id, null, t, `Acquisto programmato eseguito: ${p.name}${tag}`);
+      if (p.recurrence === 'none' && f && f.plannedId === p.id) {
         releaseAll(s, ctx, f, log, 'acquisto concluso: residuo rilasciato');
         const fb = copy(f);
         f.archived = true;
         log('archive', 'fund', f.id, fb, copy(f));
       }
-    } else {
-      p.dueDate = p.recurrence === 'weekly' ? addDays(p.dueDate, 7) : addMonths(p.dueDate, MONTHS_STEP[p.recurrence], p.anchorDay);
     }
+    if (p.recurrence === 'none') p.status = 'done';
+    else p.dueDate = p.recurrence === 'weekly' ? addDays(p.dueDate, 7) : addMonths(p.dueDate, MONTHS_STEP[p.recurrence], p.anchorDay);
     log('complete', 'planned', id, before, copy(p));
-    return t.id;
+    return doneId;
   });
+}
+/**
+ * Esegue da sé i versamenti interni (es. PAC dalla tasca Tasse alla tasca PAC) arrivati a scadenza, SOLO per le voci che
+ * hai configurato con "esegui automaticamente". Si ferma se sul conto di origine non c'è abbastanza denaro libero:
+ * in quel caso la voce resta da confermare a mano. Ogni esecuzione è tracciata nello storico come automatica.
+ */
+export async function runAutoPlanned(state, ctx) {
+  let cur = state, done = 0;
+  for (const p0 of state.planned) {
+    for (let guard = 0; guard < 36; guard++) {
+      const p = cur.planned.find((x) => x.id === p0.id);
+      if (!p || p.status !== 'planned' || !p.autoExecute || !p.toAccountId || p.confirm || p.dueDate > ctx.today) break;
+      const free = snapshot(cur).freeByAccount[p.accountId];
+      if (free < p.cents) break;                          // niente denaro libero sufficiente: resta da confermare
+      const from = cur.accounts.find((a) => a.id === p.accountId), to = cur.accounts.find((a) => a.id === p.toAccountId);
+      const date = p.dueDate >= from.openingDate && p.dueDate >= to.openingDate ? p.dueDate : ctx.today;
+      cur = (await completePlanned(cur, ctx, { id: p.id, date, auto: true })).state;
+      done++;
+    }
+  }
+  return { state: cur, result: done };
 }
 
 // ───────────────────────── Impostazioni ─────────────────────────
@@ -725,6 +763,55 @@ export function setAccountBalance(state, ctx, accountId, targetCents) {
     log('set_balance', 'account', a.id, before, copy(a), `Saldo dichiarato dall'utente: ${formatEuro(targetCents)}`);
   });
 }
+/**
+ * Aggiorna i saldi di uno o più conti con il saldo REALE di oggi (quello che mostra la banca), anche se non apri l'app
+ * da giorni. Non riscrive mai la storia:
+ *  • saldo "da aggiornare" → calibra il saldo iniziale;
+ *  • conto SENZA movimenti → corregge il saldo iniziale (un errore di battitura non lascia rettifiche);
+ *  • conto CON movimenti → registra una rettifica tracciata di oggi (categoria "Rettifica di quadratura") per la differenza.
+ * Atomico: o si aggiornano tutti i conti indicati o nessuno.
+ */
+export function updateBalances(state, ctx, items) {
+  return mutate(state, ctx, (s, log) => {
+    req(Array.isArray(items) && items.length > 0, 'vuoto', 'Nessun saldo da aggiornare');
+    const changed = [];
+    for (const it of items) {
+      const a = find(s.accounts, it.accountId, 'Conto');
+      assertCents(it.balanceCents, 'Saldo');
+      const before = copy(a);
+      const current = balanceOf(s, a.id, ctx.today);
+      const diff = it.balanceCents - current;
+      if (a.balanceUnknown) {
+        a.openingCents = it.balanceCents - (current - a.openingCents);
+        assertCents(a.openingCents, 'Saldo iniziale');
+        a.balanceUnknown = false;
+        log('set_balance', 'account', a.id, before, copy(a), `Saldo dichiarato dall'utente: ${formatEuro(it.balanceCents)}`);
+        changed.push({ accountId: a.id, how: 'initial', diff: it.balanceCents - current });
+        continue;
+      }
+      if (diff === 0) continue;
+      const hasMovements = s.transactions.some((t) => t.accountId === a.id && t.status === 'posted')
+        || s.transfers.some((t) => t.status === 'posted' && (t.fromAccountId === a.id || t.toAccountId === a.id));
+      if (!hasMovements) {
+        a.openingCents = it.balanceCents;
+        assertCents(a.openingCents, 'Saldo iniziale');
+        log('set_balance', 'account', a.id, before, copy(a), `Saldo iniziale corretto a ${formatEuro(it.balanceCents)} (nessun movimento sul conto)`);
+        changed.push({ accountId: a.id, how: 'initial', diff });
+        continue;
+      }
+      req(!a.archived, 'conto_archiviato', `${a.name} è archiviato`);
+      req(ctx.today >= a.openingDate, 'data_prima_apertura', 'La data precede il saldo iniziale del conto');
+      const t = { id: ctx.newId(), accountId: a.id, date: ctx.today, cents: diff, kind: 'adjustment', categoryId: 'cat_adj', fundId: null, receivableId: null, plannedId: null, note: `Aggiornamento saldo: la banca indica ${formatEuro(it.balanceCents)}`, status: 'posted', voidReason: null, createdAt: ctx.nowIso, updatedAt: ctx.nowIso };
+      s.transactions.push(t);
+      const rec = { id: ctx.newId(), accountId: a.id, date: ctx.today, bankCents: it.balanceCents, resolvedTxId: t.id, createdAt: ctx.nowIso };
+      s.reconciliations.push(rec);
+      log('create', 'transaction', t.id, null, t, `Rettifica di ${formatEuro(diff, { plus: true })} per allineare ${a.name} al saldo dichiarato`);
+      log('create', 'reconciliation', rec.id, null, rec, `Saldo di ${a.name} dichiarato dall'utente: ${formatEuro(it.balanceCents)}`);
+      changed.push({ accountId: a.id, how: 'adjustment', diff });
+    }
+    return changed;
+  });
+}
 export function verifyTaxRates(state, ctx, year) {
   return mutate(state, ctx, (s, log) => {
     req(Number.isInteger(year), 'anno', 'Anno non valido');
@@ -783,7 +870,7 @@ export function applyProfile(state, ctx, profile) {
       const day = x.dueDay ?? 1;
       const base = x.dueDay ? (ctx.today.slice(8) <= String(day).padStart(2, '0') ? ctx.today.slice(0, 7) : addMonths(ctx.today.slice(0, 7) + '-01', 1).slice(0, 7)) : addMonths(ctx.today.slice(0, 7) + '-01', 1).slice(0, 7);
       const dueDate = `${base}-${String(day).padStart(2, '0')}`;
-      const p = { id: ctx.newId(), name: needName(x.name), kind: x.kind, cents: x.cents, dueDate, anchorDay: day, priority: 2, accountId: accId[x.accountKey], fundId: null, recurrence: x.recurrence, status: 'planned', createdAt: ctx.nowIso, categoryId: x.categoryId ?? (x.kind === 'investment' ? 'cat_invest' : 'cat_other'), autoPay: !!x.autoPay, remindDays: 2, confirm: x.confirm ?? (x.dueDay ? null : 'date'), origin: 'profile' };
+      const p = { id: ctx.newId(), name: needName(x.name), kind: x.kind, cents: x.cents, dueDate, anchorDay: day, priority: 2, accountId: accId[x.accountKey], fundId: null, recurrence: x.recurrence, status: 'planned', createdAt: ctx.nowIso, categoryId: x.categoryId ?? (x.kind === 'investment' ? 'cat_invest' : 'cat_other'), autoPay: !!x.autoPay, remindDays: 2, confirm: x.confirm ?? (x.dueDay ? null : 'date'), origin: 'profile', toAccountId: x.toAccountKey ? accId[x.toAccountKey] : null, autoExecute: !!x.autoExecute };
       find(s.categories, p.categoryId, 'Categoria');
       s.planned.push(p);
       log('create', 'planned', p.id, null, p, 'Dal profilo personale · NON segnata come pagata' + (p.confirm ? ` · da confermare (${p.confirm === 'date' ? 'data' : 'attiva'})` : ''));

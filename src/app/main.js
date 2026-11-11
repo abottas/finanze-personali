@@ -15,7 +15,7 @@ import { today as todayLocal } from '../core/dates.js';
 import { AppError } from '../core/errors.js';
 import * as C from '../core/commands.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const $ = (s) => document.querySelector(s);
 const root = $('#app'), sheetRoot = $('#sheet-root'), toastEl = $('#toast'), cover = $('#cover');
 
@@ -184,6 +184,10 @@ async function afterUnlock(state, { recovered = false } = {}) {
   // Genera gli incassi attesi delle fatture ricorrenti dei prossimi mesi (idempotente) e salva se serve.
   if (state.invoiceTemplates.some((t) => t.active !== false)) {
     try { const before = state.receivables.length; await commit(async (s, c) => { const r = await C.materializeInvoices(s, c); return r.state.receivables.length === before ? { state: s, result: 0 } : r; }); } catch (e) { console.error(e); }
+  }
+  // Versamenti interni a scadenza (es. PAC dalla tasca Tasse alla tasca PAC) configurati come automatici.
+  if (state.planned.some((p) => p.status === 'planned' && p.autoExecute && !p.confirm && p.dueDate <= app.today)) {
+    try { const n = await commit(async (s, c) => { const r = await C.runAutoPlanned(s, c); return r.result ? r : { state: s, result: 0 }; }); if (n) toast(`${n} versament${n > 1 ? 'i' : 'o'} automatic${n > 1 ? 'i' : 'o'} eseguit${n > 1 ? 'i' : 'o'} (PAC)`); } catch (e) { console.error(e); }
   }
   // Archivio vuoto appena creato: propone la configurazione guidata.
   if (!state.meta.demo && state.accounts.length === 0 && !app.onboardingShown) { app.onboardingShown = true; actions.onboarding(); }

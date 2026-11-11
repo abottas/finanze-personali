@@ -28,7 +28,7 @@ src/core/      logica contabile PURA, senza DOM né I/O (testata da sola)
 src/crypto/    vault (chiavi, cifratura) · backup (.fpbak) · hash · b64
 src/storage/   adapter IndexedDB e in-memoria (test)
 src/app/       interfaccia: html (escaping automatico) · views · actions · main
-tests/         149 test automatici (node:test)
+tests/         169 test automatici (node:test)
 scripts/       serve · e2e (Chromium reale) · check-sw · make-icons
 ```
 
@@ -111,6 +111,13 @@ Orizzonte configurabile (90 gg). Serie **prudente**: parte dal saldo reale e sot
 * **Obiettivi** "da definire" (nessun importo inventato), con intervallo minimo–massimo e flag *provvisorio*.
 * **Fisco: quattro numeri separati** (pagina Tasse): *stima fiscale* · *accantonamento personale (virtuale)* · *somme effettivamente trasferite (bonifici confermati)* · *debiti effettivamente pagati*. Aliquote iniziali marcate **"da verificare per l'anno"** finché non le confermi.
 * **Categorie**: spese di consumo, **investimenti** (separati) e entrate; risparmio e trasferimenti non sono mai spese.
+
+### Saldi e tasche (v0.5)
+
+* **Aggiornare i saldi in qualsiasi momento**, anche in blocco (Panoramica → *Aggiorna saldi*): scrivi il saldo reale di oggi dei conti che vuoi (gli altri vuoti). Non si riscrive mai la storia: un conto **senza movimenti** corregge semplicemente il saldo iniziale (un errore di battitura non lascia rettifiche); un conto **con movimenti** registra una **rettifica tracciata** di oggi (categoria *Rettifica di quadratura*, mai una spesa né un'entrata) con la differenza. Operazione atomica.
+* **Tasche** (sotto-conti della stessa banca, raggruppati nella mappa dei soldi): ad esempio Trade Republic = *Tasse* (liquidità, dove arrivano i bonifici) + *PAC* (investito). Un conto di tipo **investimento** fa parte del patrimonio ma **non della liquidità**: il "libero da spendere", le previsioni e le riserve dei fondi non lo contano.
+* **Versamento PAC = trasferimento interno** (scopo *investimento*) dalla tasca Tasse alla tasca PAC, il giorno di scadenza (es. il 2): non è una spesa né un'entrata, riduce la liquidità, aumenta l'*investito* e non tocca grafici delle spese né budget.
+* **Esecuzione automatica opzionale** (per voce): all'apertura dell'app i versamenti scaduti vengono eseguiti da soli, con la data di scadenza e traccia "automatico" nello storico. Si ferma se nella tasca di origine non c'è denaro **libero** sufficiente (la riserva fiscale non viene mai consumata) e le voci "da confermare" non partono. Disattivabile per ogni voce.
 
 ### Altre funzioni per l'autonomo (v0.2)
 

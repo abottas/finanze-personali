@@ -21,6 +21,15 @@ export function monthlySeries(state, today, months = 6) {
     else if (t.kind === 'investment') m.invested += -t.cents;
     else if (t.categoryId !== 'cat_tax' && t.categoryId !== 'cat_inps') m.expense += -t.cents;
   }
+  // Versamenti verso conti di investimento (es. PAC dalla tasca Tasse alla tasca PAC): investimento, non spesa.
+  const isInv = Object.fromEntries(state.accounts.map((a) => [a.id, a.type === 'investment']));
+  for (const t of state.transfers) {
+    if (t.status !== 'posted') continue;
+    const m = out[idx[monthOf(t.date)]];
+    if (!m) continue;
+    if (isInv[t.toAccountId] && !isInv[t.fromAccountId]) m.invested += t.cents;
+    else if (isInv[t.fromAccountId] && !isInv[t.toAccountId]) m.invested -= t.cents;
+  }
   const tp = state.settings.taxProfile;
   if (tp.enabled && tp.fundId) {
     for (const al of state.allocations) {
@@ -38,7 +47,14 @@ export function monthlySeries(state, today, months = 6) {
 
 /** Totale versato in investimenti (versamenti cumulati, NON il valore di mercato). */
 export function investedTotal(state) {
-  return state.transactions.reduce((s, t) => (t.status === 'posted' && t.kind === 'investment' ? s - t.cents : s), 0);
+  const isInv = Object.fromEntries(state.accounts.map((a) => [a.id, a.type === 'investment']));
+  let n = state.transactions.reduce((s, t) => (t.status === 'posted' && t.kind === 'investment' ? s - t.cents : s), 0);
+  for (const t of state.transfers) {
+    if (t.status !== 'posted') continue;
+    if (isInv[t.toAccountId] && !isInv[t.fromAccountId]) n += t.cents;
+    else if (isInv[t.fromAccountId] && !isInv[t.toAccountId]) n -= t.cents;
+  }
+  return n;
 }
 
 /**

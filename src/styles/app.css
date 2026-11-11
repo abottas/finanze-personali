@@ -277,3 +277,13 @@ button.item:active { opacity: .6; }
 
 .profile-pick { display: none; } form[data-start="profile"] .profile-pick { display: block; }
 .seg label { position: relative; }
+
+.bal-field > span { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.card > h2 > span { display: inline-flex; gap: 12px; text-transform: none; letter-spacing: 0; }
+
+.group > .group-head { display: flex; align-items: center; gap: 12px; padding-bottom: 6px; }
+.group-head .bal { font-size: 20px; font-weight: 700; }
+.pockets { border-left: 3px solid var(--line); margin-left: 18px; padding-left: 12px; }
+.pocket { padding: 10px 0; border-top: 1px dashed var(--line); } .pocket:first-child { border-top: 0; padding-top: 4px; }
+.pocket .head { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; } .pocket .head .bal { font-size: 17px; font-weight: 700; }
+.hero-sub { font-size: 12px; opacity: .85; margin-top: 8px; }

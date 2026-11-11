@@ -32,9 +32,9 @@ test('profilo: il file di esempio è valido; formato/versione/chiavi errate rifi
 test('profilo: crea conti con ruoli, SALDI "DA AGGIORNARE" (mai zero inventato), nessun movimento', async () => {
   const s = await fresh();
   assert.deepEqual(validateState(s), []);
-  assert.equal(s.accounts.length, 5);
+  assert.equal(s.accounts.length, 6);
   const unknown = s.accounts.filter((a) => a.balanceUnknown).map((a) => a.name);
-  assert.deepEqual(unknown.sort(), ['Banca Accrediti', 'Banca Risparmio', 'Banca Spese', 'Broker Tasse']);
+  assert.deepEqual(unknown.sort(), ['Banca Accrediti', 'Banca Risparmio', 'Banca Spese', 'Broker PAC', 'Broker Tasse']);
   assert.equal(byName(s.accounts, 'Banca Extra').balanceUnknown, false);        // saldo fornito dal profilo
   assert.equal(byName(s.accounts, 'Banca Accrediti').role, 'Accredito dei compensi');
   assert.ok(s.accounts.every((a) => a.origin === 'profile'));
@@ -100,7 +100,11 @@ test('profilo: scadenze ricorrenti NON pagate; PAC = investimento; data ignota �
   const f = forecast(s, TODAY, 90);
   const names = new Set(f.events.filter((e) => e.kind === 'planned').map((e) => e.label));
   assert.ok(names.has('Corso') && names.has('PAC') && !names.has('Assicurazione'));   // l'inattiva/da confermare non pesa
-  assert.ok(!/Corso|PAC|Assicurazione/.test(buildIcs(s, { today: TODAY })));          // nessun promemoria finché non è confermata
+  const ics = buildIcs(s, { today: TODAY });
+  assert.ok(!/Corso|Assicurazione/.test(ics));                                        // data/attività da confermare: nessun promemoria finché non è certa
+  assert.match(ics, /PAC/);                                                            // il PAC ha il giorno certo (il 2): promemoria presente
+  assert.equal(byName(s.planned, 'PAC').confirm, null);
+  assert.ok(byName(s.planned, 'PAC').toAccountId && byName(s.planned, 'PAC').autoExecute);  // versamento interno verso la tasca PAC, automatico
 });
 test('conferma della voce "da confermare come attiva": attiva → entra in previsione; non attiva → annullata', async () => {
   let s = await fresh();
