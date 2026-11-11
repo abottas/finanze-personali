@@ -50,7 +50,8 @@
     "fundKey": "f_tax"
   },
   "budget": {
-    "weeklyCents": 20000
+    "weeklyCents": 20000,
+    "accountKey": "acc_daily"
   },
   "funds": [
     {

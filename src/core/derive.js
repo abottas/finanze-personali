@@ -45,7 +45,7 @@ export function snapshot(state) {
   // Una allocazione è un vincolo VIRTUALE su un conto preciso: il fondo può avere riserve su più conti.
   const funds = {};
   const reservedByAccount = {};
-  const reservedByKind = { goal: 0, tax: 0, planned: 0, reserve: 0 };
+  const reservedByKind = { goal: 0, tax: 0, planned: 0, reserve: 0, budget: 0 };
   let reserved = 0;
   for (const f of state.funds) {
     const as = assignedTot[f.id] ?? 0, sp = spentTot[f.id] ?? 0;

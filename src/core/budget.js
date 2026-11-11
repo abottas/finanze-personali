@@ -1,5 +1,7 @@
-// Budget settimanale con riporto. È un TETTO DI SPESA (non denaro vincolato).
-// Conta solo: uscite effettive, non annullate, non pagate da un fondo, in categorie "nel budget".
+// Budget settimanale con riporto. Può essere solo un TETTO DI SPESA oppure — se attivi il finanziamento — un FONDO vero:
+// ogni settimana l'app riserva (virtualmente) il budget dal denaro libero del conto spese, e le spese lo consumano.
+// Conta solo: uscite effettive, non annullate, in categorie "nel budget", NON legate a una scadenza programmata
+// (affitto, abbonamenti… sono impegni a parte) e non pagate da un altro fondo.
 import { addDays, weekStart } from './dates.js';
 
 export function budgetStatus(state, today) {
@@ -13,7 +15,8 @@ export function budgetStatus(state, today) {
 
   const spentByWeek = new Map();
   for (const t of state.transactions) {
-    if (t.status !== 'posted' || t.kind !== 'expense' || t.fundId) continue;
+    if (t.status !== 'posted' || t.kind !== 'expense' || t.plannedId) continue;
+    if (t.fundId && t.fundId !== b.fundId) continue;     // pagata da un altro fondo: non pesa sul budget
     if (cat[t.categoryId]?.inBudget === false) continue;
     if (t.date < b.startDate || t.date > today) continue;
     const ws = weekStart(t.date, startsOn);
@@ -30,4 +33,15 @@ export function budgetStatus(state, today) {
     ws = addDays(ws, 7);
   }
   return out;
+}
+
+/**
+ * Quanto dovrebbe esserci nel fondo budget all'inizio della settimana corrente:
+ *   settimanale + riporto (avanzo riportato; sforo sottratto), mai meno di zero.
+ * Le stesse regole di riporto che hai già configurato.
+ */
+export function budgetTargetLevel(state, today) {
+  const st = budgetStatus(state, today);
+  if (!st.started) return 0;
+  return Math.max(0, st.baseCents + st.carryCents);
 }

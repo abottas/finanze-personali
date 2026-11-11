@@ -18,7 +18,7 @@ Panoramica (saldo, libero, vincolato, budget, fondi, scadenze, problemi) · Movi
 Serve solo Node ≥ 22 (nessuna dipendenza da installare).
 
 ```bash
-npm test                    # 169 test: regole contabili, cifratura, backup, controlli statici
+npm test                    # 183 test: regole contabili, cifratura, backup, controlli statici
 node scripts/serve.mjs      # http://127.0.0.1:8080/  (localhost è un "contesto sicuro")
 node scripts/e2e.mjs        # prova end-to-end in Chromium (richiede Playwright)
 ```

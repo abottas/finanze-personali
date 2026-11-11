@@ -78,7 +78,7 @@ export function validateState(st) {
   for (const f of st.funds) {
     if (!has('accounts', f.accountId)) bad(`fondo ${f.id}: conto inesistente`);
     if (!isStr(f.name, 80) || !f.name.trim()) bad(`fondo ${f.id}: nome non valido`);
-    if (!['goal', 'tax', 'planned', 'reserve'].includes(f.kind)) bad(`fondo ${f.id}: tipo non valido`);
+    if (!['goal', 'tax', 'planned', 'reserve', 'budget'].includes(f.kind)) bad(`fondo ${f.id}: tipo non valido`);
     if (f.goal != null) {
       const g = f.goal;
       if (g.targetCents !== null && (!isCents(g.targetCents) || g.targetCents <= 0)) bad(`fondo ${f.id}: obiettivo non valido`);  // null = "da definire"
@@ -167,6 +167,11 @@ export function validateState(st) {
   if (!Number.isInteger(s.backupReminderDays) || s.backupReminderDays < 1 || s.backupReminderDays > 365) bad('impostazioni: promemoria backup non valido');
   const b = s.budget;
   if (!b || !isCents(b.weeklyCents) || b.weeklyCents < 0 || !isDate(b.startDate)) bad('impostazioni: budget non valido');
+  else {
+    if (b.accountId != null && !has('accounts', b.accountId)) bad('budget: conto inesistente');
+    if (b.fundId != null && (!has('funds', b.fundId) || st.funds.find((f) => f.id === b.fundId)?.kind !== 'budget')) bad('budget: fondo inesistente o non di tipo budget');
+    if (b.lastFundedWeek != null && !isDate(b.lastFundedWeek)) bad('budget: data di finanziamento non valida');
+  }
   if (!Array.isArray(s.taxRules)) bad('impostazioni: regole fiscali mancanti');
   else for (const r of s.taxRules) {
     if (!isId(r.id) || !Number.isInteger(r.bp) || r.bp < 0 || r.bp > 10000) bad('regola fiscale: aliquota non valida');

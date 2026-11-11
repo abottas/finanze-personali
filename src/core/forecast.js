@@ -28,10 +28,15 @@ export function forecast(state, today, days = state.settings.forecastDays) {
   const snap = snapshot(state);
   const events = []; // { date, kind, label, total, free, prudent }
 
-  // Budget settimanale: considerato impegnato all'inizio di ogni settimana (prudente).
+  // Budget settimanale: considerato impegnato a inizio settimana (prudente). Se è FINANZIATO (fondo), la parte già riservata
+  // non pesa di nuovo sul libero: pesa solo la parte non ancora finanziata. Sul totale (cassa) esce comunque per intero.
   const bs = budgetStatus(state, today);
   if (bs.baseCents > 0) {
-    if (bs.started && bs.remainingCents > 0) events.push({ date: today, kind: 'budget', label: 'Budget settimana (residuo)', total: -bs.remainingCents, free: -bs.remainingCents, prudent: true });
+    const bf = state.settings.budget.fundId ? snap.funds[state.settings.budget.fundId]?.available ?? 0 : 0;
+    if (bs.started && bs.remainingCents > 0) {
+      const unfunded = Math.max(0, bs.remainingCents - Math.min(bf, bs.remainingCents));
+      events.push({ date: today, kind: 'budget', label: 'Budget settimana (residuo)', total: -bs.remainingCents, free: unfunded ? -unfunded : 0, prudent: true });
+    }
     let ws = addDays(bs.weekStart, 7);
     while (ws <= end) {
       if (ws >= state.settings.budget.startDate) events.push({ date: ws, kind: 'budget', label: 'Budget settimanale', total: -bs.baseCents, free: -bs.baseCents, prudent: true });

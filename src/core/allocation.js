@@ -94,7 +94,7 @@ export function proposeAllocation(state, { accountId, cents, today, professional
   }
 
   const needs = state.funds
-    .filter((f) => !f.archived && f.kind !== 'tax')
+    .filter((f) => !f.archived && f.kind !== 'tax' && f.kind !== 'budget')
     .map((f) => {
       const need = fundNeed(state, f, snap) - (taken[f.id] ?? 0);
       const dl = deadlineOf(state, f);

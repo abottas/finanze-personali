@@ -14,7 +14,7 @@ import { formatEuro } from '../core/money.js';
 import { formatDate, formatDateLong, diffDays } from '../core/dates.js';
 
 const byId = (arr) => Object.fromEntries(arr.map((x) => [x.id, x]));
-const KIND_LABEL = { goal: 'Obiettivo', tax: 'Fiscale', planned: 'Acquisto', reserve: 'Riserva' };
+const KIND_LABEL = { goal: 'Obiettivo', tax: 'Fiscale', planned: 'Acquisto', reserve: 'Riserva', budget: 'Budget' };
 const ACC_LABEL = { checking: 'Conto corrente', savings: 'Risparmio', cash: 'Contanti', other: 'Altro' };
 
 export const topbar = (title, sub = '', actions = '') => html`<div class="topbar"><div><h1>${title}</h1>${sub ? html`<div class="sub">${sub}</div>` : ''}</div><div class="actions">${actions}</div></div>`;
@@ -78,6 +78,19 @@ export function pendingCard(app, snap) {
     <div class="small muted mt0">Sono accantonamenti <b>virtuali</b>: il denaro è ancora sul conto di origine. Quando fai il bonifico in banca, confermalo qui: solo allora viene registrato.</div>
     ${list.map((p) => { const f = st.funds.find((x) => x.id === p.fundId); return html`<div class="dueitem"><span class="tile sm col-${f.color}">${f.icon}</span><div class="grow"><div class="t ellipsis">${f.name}</div><div class="s small muted">${nm(p.fromAccountId)} → ${nm(p.toAccountId)}</div></div><div class="r num">${amt(p.cents)}</div><button class="btn sm primary inline" data-action="confirm-transfer" data-fund="${p.fundId}" data-from="${p.fromAccountId}" data-to="${p.toAccountId}" data-cents="${p.cents}">Bonifico fatto</button></div>`; })}
   </section>`;
+}
+
+/** Riga "finanziamento" del budget: quanto è riservato davvero rispetto a quanto serve questa settimana. */
+function budgetFundLine(st, snap, bs) {
+  const b = st.settings.budget;
+  if (!b.fundId) return html`<div class="note">Il budget è solo un <b>tetto di spesa</b>: non riserva denaro. <button class="link-btn small" data-nav="settings/budget">Finanzialo come un fondo</button></div>`;
+  const have = snap.funds[b.fundId]?.available ?? 0;
+  const need = Math.max(0, bs.remainingCents);
+  const short = Math.max(0, need - have);
+  const acc = st.accounts.find((a) => a.id === b.accountId);
+  return short > 0
+    ? html`<div class="alert">${I.warn}<span class="grow">Budget <b>non del tutto finanziato</b>: riservati ${formatEuro(have)} su ${formatEuro(need)} (mancano ${formatEuro(short)}${acc?.balanceUnknown ? ': aggiorna il saldo di ' + acc.name : ' nel denaro libero di ' + (acc?.name ?? 'conto spese')}).</span><button class="btn sm primary inline" data-action="budget-fund-now">Finanzia ora</button></div>`
+    : html`<div class="small muted mt8">🧺 Finanziato: ${formatEuro(have)} riservati sul conto ${acc?.name ?? ''} · non sono liberi da spendere altrove.</div>`;
 }
 
 export function earningsCard(app) {
@@ -164,6 +177,7 @@ export function viewOverview(app) {
         <div class="row between"><div><div class="small muted">Residuo (${formatDate(bs.weekStart)} – ${formatDate(bs.weekEnd)})</div><div class="num" data-big>${amt(bs.remainingCents, { tone: true })}</div></div>
         <div class="r small muted">Speso ${amt(bs.spentCents)}<br>su ${amt(bs.baseCents + bs.carryCents)}</div></div>
         <div class="bar-wrap">${bar(pctOf(bs.spentCents, bs.baseCents + bs.carryCents), bs.remainingCents < 0 ? 'neg' : bs.remainingCents < (bs.baseCents + bs.carryCents) * 0.2 ? 'warn' : 'pos')}</div>
+        ${budgetFundLine(st, snap, bs)}
         ${bs.carryCents !== 0 ? html`<div class="small muted">${bs.carryCents > 0 ? 'Avanzo riportato' : 'Disavanzo riportato'}: ${amt(bs.carryCents, { plus: true })}</div>` : ''}`}
     </section>
 
@@ -276,6 +290,7 @@ export function viewFunds(app) {
     ${section('Obiettivi di risparmio', goals)}
     ${section('Accantonamenti fiscali', group('tax'))}
     ${section('Acquisti programmati', group('planned'))}
+    ${section('Budget settimanale', group('budget'))}
     ${section('Riserve', group('reserve'))}
   </div>`;
 }
@@ -423,7 +438,12 @@ function settingsBudget(app, back) {
     <section class="card"><h2>Budget settimanale <button class="link-btn small" data-action="edit-budget">Modifica</button></h2>
       <div class="kv"><span class="k">Importo</span><span class="num">${amt(b.weeklyCents)}</span><span class="k">Dal</span><span>${formatDate(b.startDate, { year: true })}</span>
       <span class="k">Riporto avanzi</span><span>${b.carryOver ? 'Sì' : 'No'}</span><span class="k">Riporto disavanzi</span><span>${b.carryOver && b.carryDeficit ? 'Sì' : 'No'}</span></div>
-      <div class="note">Il budget è un tetto di spesa: non vincola denaro. Contano le uscite effettive in categorie "nel budget" non pagate da un fondo.</div></section>
+      <div class="note">Contano le uscite effettive in categorie "nel budget" (non le scadenze programmate come corso o abbonamenti, che sono impegni a parte).</div></section>
+    <section class="card"><h2>Finanziamento del budget ${b.fundId ? pill('attivo', 'pos') : pill('non attivo')}</h2>
+      ${b.fundId ? html`<p class="small mt0">Ogni settimana l'app <b>riserva</b> il budget dal denaro libero di <b>${st.accounts.find((a) => a.id === b.accountId)?.name}</b>: i soldi restano sul conto ma non sono più "liberi". Le spese del budget consumano il fondo. <b>Avanzo</b> riportato; <b>sforo</b> sottratto dalla settimana dopo. Mai oltre il denaro libero: se non basta, ti dice quanto manca.</p>
+        <div class="btn-row"><button class="btn primary" data-action="budget-fund-now">Finanzia ora</button><button class="btn danger" data-action="budget-fund-off">Disattiva</button></div>`
+      : html`<p class="small mt0">Con 500 € in conto e un budget di 220 €, i 220 vanno <b>riservati</b>: il libero vero è 280. Attiva il finanziamento per trattare il budget come un fondo, ogni settimana.</p>
+        <button class="btn primary block" data-action="budget-fund-setup" ${b.weeklyCents > 0 ? '' : raw('disabled')}>Finanzia il budget come un fondo</button>${b.weeklyCents > 0 ? '' : html`<div class="small muted mt8">Imposta prima l'importo settimanale.</div>`}`}</section>
     <section class="card"><h2>Accantonamenti fiscali <button class="link-btn small" data-action="edit-tax">Modifica</button></h2>
       ${st.settings.taxRules.length === 0 ? empty('Nessuna regola', 'Esempio: 25% di ogni incasso professionale nel fondo imposte.') : html`<ul class="list">${st.settings.taxRules.map((r) => html`<li class="item"><div class="grow"><div class="t">${r.name}</div><div class="s">→ ${funds[r.fundId]?.name}</div></div><div class="r num">${(r.bp / 100).toLocaleString('it-IT')}%</div></li>`)}</ul>`}
       <div class="note">L'accantonamento è un'<b>allocazione virtuale</b>: non sposta denaro in banca e non è spendibile finché resta nel fondo.</div></section></div>`;

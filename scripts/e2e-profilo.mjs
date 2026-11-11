@@ -46,10 +46,18 @@ assert.match(sd, /Dati configurati/); assert.match(sd, /Movimenti previsti/); as
 step('aggiorna saldi: foglio unico con tutti i conti');
 await g.click('button[data-action=update-balances] >> nth=0'); await g.waitForSelector('.sheet:has-text("Aggiorna saldi")'); await gshot('38-aggiorna-saldi');
 assert.match(await g.textContent('.sheet'), /Saldo non ancora inserito/);
-await g.fill('.sheet input.money >> nth=0', '500'); await g.fill('.sheet input.money >> nth=2', '1000');
+await g.fill('.sheet input.money >> nth=0', '500'); await g.fill('.sheet input.money >> nth=1', '500'); await g.fill('.sheet input.money >> nth=2', '1000');
 await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' });
 await g.evaluate(() => { location.hash = '#/overview'; });
-await g.waitForSelector('text=Totale parziale: 3 conti da aggiornare');
+await g.waitForSelector('text=Totale parziale: 2 conti da aggiornare');
+step('BUDGET FINANZIATO: 500 € in conto e budget da 200 € → il budget va riservato, non è solo un tetto');
+await g.waitForSelector('text=non del tutto finanziato'); await gshot('40-budget-non-finanziato');
+await g.click('button[data-action=budget-fund-now]'); await g.waitForSelector('#toast.show');
+await g.waitForFunction(() => /Finanziato: 200,00\s€ riservati/.test(document.body.textContent));
+assert.doesNotMatch(await g.textContent('.screen'), /non del tutto finanziato/);
+await gshot('41-budget-finanziato');
+const budgetRow = await g.textContent('.screen');
+assert.match(budgetRow, /Budget settimanale/);                                         // il fondo compare tra i soldi del conto spese
 step('Trade Republic raggruppata in due tasche (Tasse + PAC): il PAC non è liquidità');
 const mapTxt = await g.textContent('.screen');
 assert.match(mapTxt, /2 tasche/); assert.match(mapTxt, /Investito · non è liquidità/); assert.match(mapTxt, /Riserva fiscale \(liquidità\)/);

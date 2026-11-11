@@ -46,6 +46,7 @@ export function validateProfile(p) {
     if (!fk.has(t.fundKey)) bad('profilo fiscale: fondo inesistente');
   }
   if (p.budget && (!isCents(p.budget.weeklyCents) || p.budget.weeklyCents < 0)) bad('budget non valido');
+  if (p.budget?.accountKey != null && !acc.has(p.budget.accountKey)) bad('budget: conto inesistente');
   for (const t of p.invoiceTemplates ?? []) {
     if (!isStr(t.client, 80)) bad('fattura ricorrente: cliente non valido');
     if (!isCents(t.cents) || t.cents <= 0) bad(`fattura ${t.client}: importo non valido`);

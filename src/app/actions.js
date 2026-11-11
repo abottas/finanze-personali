@@ -692,6 +692,23 @@ export function createActions(api) {
     'complete-planned': (el) => completePlannedSheet(el.dataset.id),
     'cancel-planned': (el) => reasonSheet('Annulla acquisto', 'Il fondo dedicato (se presente) verrà chiuso e il residuo tornerà libero.', async (r) => { await api.commit((s, c) => C.cancelPlanned(s, c, el.dataset.id, r)); }, 'Annulla acquisto'),
     'toggle-expected': () => { app.ui.showExpected = !app.ui.showExpected; api.render(); },
+    'budget-fund-setup': () => {
+      const opts = accOpts();
+      if (!opts.length) { api.toast('Aggiungi prima un conto', true); return; }
+      api.openSheet({ title: 'Finanzia il budget', submit: 'Attiva',
+        body: html`${select('account', 'Da quale conto si spende il budget?', opts, opts[0][0], { hint: 'Di solito il conto delle spese quotidiane. Il denaro del budget resta lì, ma viene riservato ogni settimana.' })}
+          <div class="note">Ogni lunedì (quando apri l'app) viene riservato l'importo del budget dal <b>denaro libero</b> di quel conto. Se non basta, finanzia quello che c'è e ti avvisa. Puoi disattivarlo quando vuoi.</div>`,
+        onSubmit: async (v) => {
+          await api.commit((s, c) => C.setupBudgetFund(s, c, { accountId: v.account }));
+          const r = await api.commit((s, c) => C.runBudgetFunding(s, c, { force: true }));
+          api.toast(r.skipped === 'saldo_da_aggiornare' ? 'Attivo: aggiorna il saldo del conto per finanziarlo' : r.shortfall > 0 ? `Finanziati ${formatEuro(r.funded)} · mancano ${formatEuro(r.shortfall)}` : `Budget finanziato: ${formatEuro(r.funded)} riservati`);
+        } });
+    },
+    'budget-fund-now': async () => {
+      const r = await api.commit((s, c) => C.runBudgetFunding(s, c, { force: true }));
+      api.toast(r.skipped === 'saldo_da_aggiornare' ? 'Aggiorna prima il saldo del conto spese' : r.funded > 0 ? `Riservati altri ${formatEuro(r.funded)}${r.shortfall > 0 ? ` · mancano ancora ${formatEuro(r.shortfall)}` : ''}` : r.shortfall > 0 ? `Nessun denaro libero: mancano ${formatEuro(r.shortfall)}` : 'Il budget è già finanziato');
+    },
+    'budget-fund-off': () => confirmSheet({ title: 'Disattiva il finanziamento', text: 'Il denaro riservato per il budget torna libero e il budget resta un semplice tetto di spesa.', label: 'Disattiva', run: async () => { await api.commit((s, c) => C.disableBudgetFund(s, c)); } }),
     'edit-budget': budgetSheet, 'edit-tax': taxSheet, 'edit-lock': lockSheet, 'change-password': passwordSheet,
     'new-reconciliation': reconciliationSheet,
     'resolve-rec': (el) => confirmSheet({ title: 'Registra rettifica', text: 'Verrà creato un movimento di rettifica tracciato per allineare il saldo alla banca. Controlla prima di non avere dimenticato movimenti.', label: 'Registra rettifica', run: async () => { await api.commit((s, c) => C.resolveReconciliation(s, c, el.dataset.id)); } }),

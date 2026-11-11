@@ -15,7 +15,7 @@ import { today as todayLocal } from '../core/dates.js';
 import { AppError } from '../core/errors.js';
 import * as C from '../core/commands.js';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const $ = (s) => document.querySelector(s);
 const root = $('#app'), sheetRoot = $('#sheet-root'), toastEl = $('#toast'), cover = $('#cover');
 
@@ -184,6 +184,13 @@ async function afterUnlock(state, { recovered = false } = {}) {
   // Genera gli incassi attesi delle fatture ricorrenti dei prossimi mesi (idempotente) e salva se serve.
   if (state.invoiceTemplates.some((t) => t.active !== false)) {
     try { const before = state.receivables.length; await commit(async (s, c) => { const r = await C.materializeInvoices(s, c); return r.state.receivables.length === before ? { state: s, result: 0 } : r; }); } catch (e) { console.error(e); }
+  }
+  // Budget finanziato: all'inizio di ogni settimana riserva il budget dal denaro libero del conto spese.
+  if (state.settings.budget.fundId) {
+    try {
+      const r = await commit(async (s, c) => { const o = await C.runBudgetFunding(s, c); return o.result.skipped ? { state: s, result: o.result } : o; });
+      if (r.funded > 0) toast(r.shortfall > 0 ? `Budget finanziato ${(r.funded / 100).toLocaleString('it-IT')} € · mancano ${(r.shortfall / 100).toLocaleString('it-IT')} €` : 'Budget della settimana finanziato');
+    } catch (e) { console.error(e); }
   }
   // Versamenti interni a scadenza (es. PAC dalla tasca Tasse alla tasca PAC) configurati come automatici.
   if (state.planned.some((p) => p.status === 'planned' && p.autoExecute && !p.confirm && p.dueDate <= app.today)) {

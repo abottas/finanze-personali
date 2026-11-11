@@ -6,11 +6,12 @@
 import { AppError, req } from './errors.js';
 import { assertCents, formatEuro, isCents, mulRatio } from './money.js';
 import { suggestedSetAside } from './tax.js';
-import { isDate, addMonths, addDays, diffDays } from './dates.js';
+import { isDate, addMonths, addDays, diffDays, weekStart } from './dates.js';
 import { COLOR_KEYS, BANKS } from './palette.js';
 import { snapshot, balanceOf } from './derive.js';
 import { validateState } from './validate.js';
 import { appendAudit } from './audit.js';
+import { budgetTargetLevel } from './budget.js';
 import { validateProfile } from './profile.js';
 
 async function mutate(state, ctx, fn) {
@@ -103,8 +104,33 @@ export function addTransaction(state, ctx, { accountId, date = ctx.today, cents,
     checkTxFields(s, ctx, t);
     s.transactions.push(t);
     log('create', 'transaction', t.id, null, t);
+    linkBudget(s, ctx, t, log);
     return t.id;
   });
+}
+
+/**
+ * Se il budget è FINANZIATO (fondo), una spesa del budget attinge dal fondo:
+ *  • il fondo copre tutto → la spesa è pagata dal fondo (il libero non cambia);
+ *  • il fondo non basta (SFORO) → si usa quello che resta nel fondo e il resto esce dal libero: la settimana dopo il
+ *    finanziamento si riduce dello sforo (regola di riporto del disavanzo).
+ * Solo spese del conto budget, in categorie "nel budget", non legate a scadenze, dalla settimana corrente in poi.
+ */
+function linkBudget(s, ctx, t, log) {
+  const b = s.settings.budget;
+  if (!b.fundId || !b.accountId || b.weeklyCents <= 0 || t.kind !== 'expense' || t.fundId || t.plannedId) return;
+  if (t.accountId !== b.accountId || t.date < b.startDate || t.date < weekStart(ctx.today, s.settings.weekStartsOn)) return;
+  if (s.categories.find((c) => c.id === t.categoryId)?.inBudget === false) return;
+  const fund = s.funds.find((f) => f.id === b.fundId);
+  if (!fund || fund.archived) return;
+  const amount = -t.cents;
+  const avail = snapshot(s).funds[fund.id].byAccount[b.accountId] ?? 0;
+  if (avail >= amount) { t.fundId = fund.id; return; }
+  if (avail > 0) {
+    // Sforo: la parte coperta dal fondo viene "consumata" liberandola, il resto era già libero.
+    const al = pushAllocation(s, ctx, fund.id, -avail, 'release', 'Budget esaurito: sforo', null, b.accountId);
+    log('release', 'allocation', al.id, null, al, `Sforo del budget: usati ${formatEuro(avail)} del fondo, ${formatEuro(amount - avail)} dal denaro libero`);
+  }
 }
 
 export function updateTransaction(state, ctx, id, patch) {
@@ -116,6 +142,9 @@ export function updateTransaction(state, ctx, id, patch) {
     for (const k of Object.keys(patch)) {
       req(allowed.includes(k), 'campo_non_modificabile', `Campo non modificabile: ${k}`);
     }
+    // Un collegamento AUTOMATICO al fondo budget viene rifatto dopo la modifica (importo/conto/categoria possono cambiare).
+    const budgetLinked = t.fundId && t.fundId === s.settings.budget.fundId && patch.fundId === undefined;
+    if (budgetLinked) t.fundId = null;
     // Per verificare la disponibilità del fondo escludiamo il movimento stesso.
     t.status = 'void';
     const snapWithout = snapshot(s);
@@ -129,6 +158,7 @@ export function updateTransaction(state, ctx, id, patch) {
       r.receivedCents = t.cents; r.receivedDate = t.date; r.accountId = t.accountId;
     }
     log('update', 'transaction', id, before, copy(t));
+    if (budgetLinked || (!t.fundId && patch.cents !== undefined)) linkBudget(s, ctx, t, log);
   });
 }
 
@@ -346,6 +376,7 @@ export function closeFund(state, ctx, id) {
     req(!(p && p.status === 'planned'), 'fondo_collegato', 'Il fondo è collegato a un acquisto programmato attivo');
     req(!s.settings.taxRules.some((r) => r.fundId === id), 'fondo_in_regola', 'Il fondo è usato da una regola fiscale');
     req(s.settings.taxProfile.fundId !== id, 'fondo_in_regola', 'Il fondo è usato dal profilo fiscale');
+    req(s.settings.budget.fundId !== id, 'fondo_in_regola', 'Il fondo è il budget settimanale: disattivalo dalle impostazioni del budget');
     releaseAll(s, ctx, f, log, 'chiusura fondo');
     const before = copy(f);
     f.archived = true;
@@ -735,6 +766,75 @@ export function materializeInvoices(state, ctx) {
 }
 
 
+// ───────────────────────── Budget settimanale FINANZIATO ─────────────────────────
+/** Attiva il finanziamento del budget: crea il fondo "Budget settimanale" sul conto spese (il finanziamento avviene a parte). */
+export function setupBudgetFund(state, ctx, { accountId }) {
+  return mutate(state, ctx, (s, log) => {
+    const acc = find(s.accounts, accountId, 'Conto spese');
+    req(acc.type !== 'investment', 'conto_investimento', 'Scegli un conto liquido');
+    req(s.settings.budget.weeklyCents > 0, 'budget_zero', 'Imposta prima l\'importo del budget settimanale');
+    req(!s.settings.budget.fundId, 'gia_attivo', 'Il budget è già finanziato come fondo');
+    const f = { id: ctx.newId(), name: 'Budget settimanale', kind: 'budget', accountId: acc.id, goal: null, plannedId: null, archived: false, createdAt: ctx.nowIso, color: 'green', icon: '🧺', parentId: null, provisional: false, origin: null };
+    s.funds.push(f);
+    const before = copy(s.settings.budget);
+    s.settings.budget.fundId = f.id; s.settings.budget.accountId = acc.id; s.settings.budget.lastFundedWeek = null;
+    log('create', 'fund', f.id, null, f, 'Budget settimanale finanziato come fondo');
+    log('update', 'budget', 'budget', before, copy(s.settings.budget));
+    return f.id;
+  });
+}
+/** Disattiva il finanziamento: il denaro riservato torna libero e il budget torna un semplice tetto di spesa. */
+export function disableBudgetFund(state, ctx) {
+  return mutate(state, ctx, (s, log) => {
+    const b = s.settings.budget;
+    req(b.fundId, 'non_attivo', 'Il budget non è finanziato');
+    const f = find(s.funds, b.fundId, 'Fondo budget');
+    releaseAll(s, ctx, f, log, 'budget disattivato');
+    const fb = copy(f), bb = copy(b);
+    f.archived = true; b.fundId = null; b.accountId = null; b.lastFundedWeek = null;
+    log('archive', 'fund', f.id, fb, copy(f), 'Finanziamento del budget disattivato');
+    log('update', 'budget', 'budget', bb, copy(b));
+  });
+}
+/**
+ * Finanzia la settimana: porta il fondo budget al livello dovuto (settimanale + riporto; avanzo riportato, sforo sottratto),
+ * usando SOLO denaro libero del conto spese. Se il libero non basta finanzia quello che c'è e ti dice quanto manca.
+ * Una volta a settimana (all'apertura dell'app) o su richiesta (`force`). Con saldo "da aggiornare" non fa nulla.
+ * @returns result {level, funded, released, shortfall, skipped}
+ */
+export function runBudgetFunding(state, ctx, { force = false } = {}) {
+  return mutate(state, ctx, (s, log) => {
+    const b = s.settings.budget;
+    const res = { level: 0, funded: 0, released: 0, shortfall: 0, skipped: null };
+    if (!b.fundId || !b.accountId || b.weeklyCents <= 0) { res.skipped = 'non_attivo'; return res; }
+    const acc = find(s.accounts, b.accountId, 'Conto spese');
+    const f = find(s.funds, b.fundId, 'Fondo budget');
+    const wk = weekStart(ctx.today, s.settings.weekStartsOn);
+    if (!force && b.lastFundedWeek && b.lastFundedWeek >= wk) { res.skipped = 'gia_fatto'; return res; }
+    if (acc.balanceUnknown) { res.skipped = 'saldo_da_aggiornare'; return res; }
+    if (ctx.today < b.startDate) { res.skipped = 'non_iniziato'; return res; }
+    const target = budgetTargetLevel(s, ctx.today);
+    const snap = snapshot(s);
+    const have = snap.funds[f.id].byAccount[acc.id] ?? 0;
+    res.level = target;
+    if (have < target) {
+      const give = Math.min(target - have, Math.max(0, snap.freeByAccount[acc.id]));
+      if (give > 0) {
+        const al = pushAllocation(s, ctx, f.id, give, 'assign', 'Finanziamento settimanale del budget', null, acc.id);
+        log('allocate', 'allocation', al.id, null, al, `Budget della settimana finanziato: ${formatEuro(give)} (livello dovuto ${formatEuro(target)})`);
+      }
+      res.funded = give; res.shortfall = target - have - give;
+    } else if (have > target) {
+      const out = have - target;                       // avanzo non riportato (o budget ridotto): torna libero
+      const al = pushAllocation(s, ctx, f.id, -out, 'release', 'Budget: eccedenza rilasciata', null, acc.id);
+      log('release', 'allocation', al.id, null, al, `Eccedenza del budget rilasciata: ${formatEuro(out)}`);
+      res.released = out;
+    }
+    if (!force || !b.lastFundedWeek || b.lastFundedWeek < wk) { const bb = copy(b); b.lastFundedWeek = wk; log('update', 'budget', 'budget', bb, copy(b), `Settimana del ${wk} finanziata`); }
+    return res;
+  });
+}
+
 // ───────────────────────── Voci da confermare, saldi da aggiornare ─────────────────────────
 /** Conferma (o scarta) una voce configurata ma "da confermare come attiva". */
 export function confirmPlanned(state, ctx, id, active) {
@@ -857,6 +957,12 @@ export function applyProfile(state, ctx, profile) {
     if (profile.budget?.weeklyCents > 0) {
       const bb = copy(s.settings.budget);
       s.settings.budget = { ...s.settings.budget, weeklyCents: profile.budget.weeklyCents, startDate: ctx.today };
+      if (profile.budget.accountKey) {                    // budget FINANZIATO: il fondo nasce vuoto e si finanzia da solo quando il saldo è noto
+        const bf = { id: ctx.newId(), name: 'Budget settimanale', kind: 'budget', accountId: accId[profile.budget.accountKey], goal: null, plannedId: null, archived: false, createdAt: ctx.nowIso, color: 'green', icon: '🧺', parentId: null, provisional: false, origin: 'profile' };
+        s.funds.push(bf);
+        s.settings.budget.fundId = bf.id; s.settings.budget.accountId = bf.accountId;
+        log('create', 'fund', bf.id, null, bf, 'Dal profilo personale · budget finanziato, non ancora finanziato');
+      }
       log('update', 'budget', 'budget', bb, copy(s.settings.budget));
     }
     for (const t of profile.invoiceTemplates ?? []) {
