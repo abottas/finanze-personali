@@ -2,7 +2,8 @@
 import { html, raw } from './html.js';
 import { I } from './icons.js';
 import { amt, empty, pill, bar, pctOf, accountTile, fundTile, catTile } from './ui.js';
-import { forecastChart, earningsChart } from './charts.js';
+import { flowChart, balanceChart, cashflowChart, budgetChart, stackedChart } from './charts.js';
+import { monthlyReport, balanceHistory, categoryTrend, weeklyBudget, kpis, cashflowByMonth, monthLabel } from '../core/reports.js';
 import { monthlySeries, categoryBreakdown, investedTotal } from '../core/analytics.js';
 import { estimateTaxes, taxLedger } from '../core/tax.js';
 import { monthlyPace } from '../core/allocation.js';
@@ -93,6 +94,8 @@ function budgetFundLine(st, snap, bs) {
     : html`<div class="small muted mt8">🧺 Finanziato: ${formatEuro(have)} riservati sul conto ${acc?.name ?? ''} · non sono liberi da spendere altrove.</div>`;
 }
 
+const flowLegend = () => html`<div class="legend"><span><i class="lg-inc"></i>Incassi</span><span><i class="lg-exp"></i>Spese</span><span><i class="lg-tax"></i>Riserva fiscale</span><span><i class="lg-inv"></i>Investito</span><span><i class="lg-net"></i>Disponibile</span></div>`;
+
 export function earningsCard(app) {
   const st = app.state;
   const series = monthlySeries(st, app.today, 6);
@@ -109,8 +112,8 @@ export function earningsCard(app) {
       <div class="legend"><span><i class="lg-exp"></i>Spese ${amt(spent)}</span><span><i class="lg-tax"></i>Riserva fiscale ${amt(tax)}</span><span><i class="c-free"></i>Resta ${amt(net, { tone: true })}</span></div>
       ${cur.income > 0 ? html`<div class="small muted mt8">Ogni 100 € incassati: ${per100(spent)} spesi, ${per100(tax)} accantonati per le tasse, ${Math.max(0, 100 - per100(spent) - per100(tax))} restano.</div>` : ''}
       ${cur.invested > 0 || investedTotal(st) > 0 ? html`<div class="kv mt8"><span class="k">📈 Investito questo mese (PAC, non è una spesa)</span><span class="num">${amt(cur.invested)}</span><span class="k">Versato in totale</span><span class="num">${amt(investedTotal(st))}</span></div>` : ''}`}
-    <div class="mt12">${earningsChart(series)}</div>
-    <div class="legend"><span><i class="lg-inc"></i>Incassi</span><span><i class="lg-exp"></i>Spese</span><span><i class="lg-tax"></i>Riserva fiscale</span></div>
+    <div class="mt12">${flowChart(series.map((m) => ({ ...m, label: monthLabel(m.month, true) })), { interactive: false, height: 160 })}</div>
+    ${flowLegend()}
   </section>`;
 }
 
@@ -353,15 +356,16 @@ export function viewPlan(app) {
   return html`<div class="screen">
     ${topbar('Pianificazione', `Previsioni a ${st.settings.forecastDays} giorni`, html`<button class="icon-btn" data-action="new-planned" aria-label="Nuovo acquisto programmato">${I.plus}</button>`)}
     <section class="card">
-      <h2>Liquidità prevista <button class="link-btn small" data-action="toggle-expected">${ui.showExpected ? 'Nascondi' : 'Mostra'} incassi attesi</button></h2>
+      <h2>Liquidità: passato e previsione</h2>
       ${st.accounts.length === 0 ? empty('Nessun conto') : html`
-      ${forecastChart(fc, { showExpected: ui.showExpected })}
-      <div class="legend"><span><i class="c-goal"></i>Libera prudente</span><span><i class="c-reserve"></i>Saldo totale</span>${ui.showExpected ? html`<span><i class="c-free"></i>Con incassi attesi (non garantiti)</span>` : ''}</div>
+      ${balanceChart(balanceHistory(st, today, 6), fc.points)}
+      <div class="legend"><span><i class="c-reserve"></i>Saldo a fine mese (storico)</span><span><i class="c-goal"></i>Previsione prudente</span><span><i class="c-free"></i>Con incassi attesi (non garantiti)</span></div>
       <div class="kv mt12"><span class="k">Libera oggi</span><span class="num">${amt(fc.start.free)}</span>
         <span class="k">Minimo previsto</span><span class="num">${amt(fc.minFree, { tone: true })} <span class="small muted">· ${formatDate(fc.minFreeDate)}</span></span>
         <span class="k">Incassi attesi (esclusi)</span><span class="num muted">${amt(expectedTotal)}</span></div>
       <div class="note">Previsione prudente: considera budget settimanale e acquisti programmati; <b>esclude</b> gli incassi non ricevuti.</div>`}
     </section>
+    ${cashflowCard(app)}
     ${issues.length ? html`<div>${issues.map((i) => html`<div class="alert ${i.severity === 'high' ? 'high' : ''}">${I.warn}<span>${i.message}${i.kind.includes('negative') ? ` dal ${formatDate(i.date)} (${formatEuro(i.cents)})` : ''}</span></div>`)}</div>` : ''}
 
     <section class="card">
@@ -540,35 +544,56 @@ function settingsCalendar(app, back) {
 }
 
 // ───────────────────────────── Analisi guadagni/costi ─────────────────────────────
-export function viewAnalysis(app) {
+export function cashflowCard(app) {
   const st = app.state;
-  const series = monthlySeries(st, app.today, 6);
-  const sel = app.ui.analysisMonth && series.some((m) => m.month === app.ui.analysisMonth) ? app.ui.analysisMonth : series.at(-1).month;
-  const m = series.find((x) => x.month === sel);
+  const cf = cashflowByMonth(st, app.today, 6);
+  const sum = (k) => cf.rows.reduce((t, r) => t + r[k], 0);
+  return html`<section class="card"><h2>Entrate e uscite previste <button class="link-btn small" data-action="export-report">Esporta</button></h2>
+    ${cashflowChart(cf.rows)}
+    <div class="legend"><span><i class="lg-exp2"></i>Entrate previste (non garantite)</span><span><i class="lg-exp"></i>Scadenze</span><span><i class="lg-bud"></i>Budget</span><span><i class="lg-inv"></i>Investimenti</span></div>
+    <div class="tbl-wrap mt8"><table class="tbl"><thead><tr><th>Mese</th><th>Entrate</th><th>Uscite</th><th>Netto</th></tr></thead><tbody>${cf.rows.map((r) => html`<tr><td>${monthLabel(r.month, true)}</td><td>${formatEuro(r.inExpected)}</td><td>${formatEuro(r.outTotal)}</td><td>${amt(r.netWithExpected, { tone: true })}</td></tr>`)}<tr><td><b>Totale</b></td><td><b>${formatEuro(sum('inExpected'))}</b></td><td><b>${formatEuro(sum('outTotal'))}</b></td><td><b>${amt(sum('netWithExpected'), { tone: true })}</b></td></tr></tbody></table></div>
+    <div class="note">Le entrate comprendono gli incassi attesi e le fatture ricorrenti future: <b>non sono garantite</b> e la liquidità prudente non le conta. Le uscite includono budget settimanale, scadenze e PAC.</div></section>`;
+}
+
+export function viewAnalysis(app) {
+  const st = app.state, today = app.today;
+  const months = [3, 6, 12].includes(app.ui.analysisRange) ? app.ui.analysisRange : 6;
+  const rep = monthlyReport(st, today, months);
+  const sel = app.ui.analysisMonth && rep.some((m) => m.month === app.ui.analysisMonth) ? app.ui.analysisMonth : rep.at(-1).month;
+  const m = rep.find((x) => x.month === sel);
+  const prev = rep[rep.findIndex((x) => x.month === sel) - 1];
   const cats = categoryBreakdown(st, sel);
+  const prevCats = prev ? Object.fromEntries(categoryBreakdown(st, prev.month).map((c) => [c.id, c.cents])) : null;
   const maxCat = Math.max(1, ...cats.map((c) => c.cents));
-  const MN = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
-  const label = (ym) => `${MN[Number(ym.slice(5)) - 1]} ${ym.slice(0, 4)}`;
-  const net = m.income - m.tax - m.expense;
+  const k = kpis(st, today);
+  const trend = categoryTrend(st, today, months, 5);
+  const wb = weeklyBudget(st, today, 8);
+  const net = m.net;
   const base = Math.max(m.income, m.expense + m.tax, 1);
   const w = (c) => ((Math.max(0, c) / base) * 100).toFixed(1);
-  const saved = m.income > 0 ? Math.round((net / m.income) * 100) : null;
-  return html`<div class="screen"><button class="back" data-nav="overview">${I.back}Panoramica</button>${topbar('Guadagni vs costi', label(sel))}
-    <div class="chips">${series.map((x) => html`<button class="chip" data-action="set-analysis" data-v="${x.month}" aria-pressed="${x.month === sel}">${label(x.month).split(' ')[0].slice(0, 3)}</button>`)}</div>
-    <section class="card"><div class="kpi">
-      <div><div class="k">Incassato</div><div class="v num">${amt(m.income)}</div></div>
-      <div class="${net < 0 ? 'neg' : 'pos'}"><div class="k">Disponibile dopo spese e riserva</div><div class="v num">${amt(net)}</div></div>
-      <div><div class="k">Spese</div><div class="v num">${amt(m.expense)}</div></div>
-      <div><div class="k">Riserva fiscale accantonata</div><div class="v num">${amt(m.tax)}</div></div>
-      <div><div class="k">📈 Investito (PAC)</div><div class="v num">${amt(m.invested)}</div></div>
-      <div><div class="k">Stima teorica tasse</div><div class="v num">${amt(m.taxEstimate)}</div></div></div>
-      <div class="ratio" aria-hidden="true"><i class="r-exp" data-w="${w(m.expense)}"></i><i class="r-tax" data-w="${w(m.tax)}"></i><i class="r-net" data-w="${w(net)}"></i></div>
-      ${saved !== null ? html`<div class="small muted">Quota che ti resta: <b>${saved}%</b> di quanto hai incassato (gli investimenti non sono sottratti: sono patrimonio, non spesa).</div>` : html`<div class="small muted">Nessun incasso in questo mese.</div>`}
-      ${st.settings.taxProfile.enabled ? '' : html`<div class="note">Attiva "Tasse e contributi" in Impostazioni per accantonare le tasse a ogni incasso.</div>`}</section>
-    <section class="card"><h2>Ultimi 6 mesi</h2>${earningsChart(series)}<div class="legend"><span><i class="lg-inc"></i>Incassi</span><span><i class="lg-exp"></i>Spese</span><span><i class="lg-tax"></i>Riserva fiscale</span></div>
-      <ul class="list mt12">${[...series].reverse().map((x) => html`<li class="item"><div class="grow"><div class="t">${label(x.month)}</div><div class="s">Incassi ${formatEuro(x.income)} · spese ${formatEuro(x.expense)} · riserva ${formatEuro(x.tax)}${x.invested ? ` · investito ${formatEuro(x.invested)}` : ''}</div></div><div class="r num">${amt(x.income - x.tax - x.expense, { tone: true, plus: true })}</div></li>`)}</ul></section>
-    <section class="card"><h2>Spese per categoria</h2>${cats.length === 0 ? empty('Nessuna spesa') : html`<ul class="list">${cats.map((c) => html`<li class="item block-item"><div class="row"><span class="tile sm col-${c.color}">${c.icon}</span><div class="grow t">${c.name}</div><div class="num">${amt(c.cents)}</div></div><div class="hbar"><i class="col-${c.color}" data-w="${Math.round((c.cents / maxCat) * 100)}"></i></div>${c.children?.map((k) => html`<div class="row small muted sub-row"><span>↳ ${k.icon} ${k.name}</span><span class="grow"></span><span class="num">${amt(k.cents)}</span></div>`)}</li>`)}</ul>`}
-      <div class="note">Le spese non includono investimenti (PAC), pagamenti di imposte e contributi (già coperti dalla riserva) né trasferimenti tra conti.</div></section></div>`;
+  const pc = (x) => (x === null ? '—' : Math.round(x * 100) + '%');
+  const delta = (cur, old) => (old === undefined || old === null || (cur === 0 && old === 0) ? '' : html`<span class="small delta ${cur > old ? 'up' : 'down'}">${cur > old ? '▲' : '▼'} ${formatEuro(Math.abs(cur - old))}</span>`);
+  const row2 = (a, b) => html`<div class="row2"><span>${a}</span><b>${b}</b></div>`;
+  return html`<div class="screen"><button class="back" data-nav="overview">${I.back}Panoramica</button>${topbar('Analisi', `Statistiche e andamento`, html`<button class="btn sm" data-action="export-report">Esporta</button>`)}
+    <div class="range-chips">${[3, 6, 12].map((n) => html`<button class="chip" data-action="set-range" data-v="${n}" aria-pressed="${n === months}">${n} mesi</button>`)}</div>
+    <section class="card"><h2>Indicatori <span class="small muted">media ultimi ${k.monthsOfData || 0} mesi completi</span></h2>
+      ${k.monthsOfData === 0 ? html`<div class="muted small">Servono almeno un mese completo di movimenti.</div>` : html`<div class="kpi3">
+        <div><div class="k">Incassi medi / mese</div><div class="v num">${formatEuro(k.avgIncome)}</div></div>
+        <div><div class="k">Spese medie / mese</div><div class="v num">${formatEuro(k.avgExpense)}</div></div>
+        <div><div class="k">Quota che ti resta</div><div class="v num">${pc(k.savingsRate)}</div><div class="s">dopo spese e riserva</div></div>
+        <div><div class="k">Autonomia</div><div class="v num">${k.runwayMonths === null ? '—' : k.runwayMonths.toFixed(1).replace('.', ',') + ' mesi'}</div><div class="s">liquidità ÷ spese medie</div></div></div>`}</section>
+    <section class="card"><h2>Entrate e uscite per mese</h2><div class="small muted">Tocca un mese per il dettaglio.</div>
+      ${flowChart(rep, { selected: sel, height: 200 })}${flowLegend()}
+      <div class="chart-detail"><div class="t"><b>${monthLabel(sel)}</b></div>
+        ${row2('Incassato', formatEuro(m.income))}${row2('Spese', formatEuro(m.expense))}${row2('Riserva fiscale accantonata', formatEuro(m.tax))}${row2('📈 Investito (PAC)', formatEuro(m.invested))}${row2('Disponibile dopo spese e riserva', formatEuro(net))}${row2('Stima teorica tasse', formatEuro(m.taxEstimate))}
+        ${m.income > 0 ? html`<div class="ratio mt8" aria-hidden="true"><i class="r-exp" data-w="${w(m.expense)}"></i><i class="r-tax" data-w="${w(m.tax)}"></i><i class="r-net" data-w="${w(net)}"></i></div><div class="small muted">Ti resta il <b>${pc(m.savingsRate)}</b> di quanto incassato (gli investimenti non sono spesa).</div>` : html`<div class="small muted mt8">Nessun incasso in questo mese.</div>`}
+        ${st.settings.taxProfile.enabled ? '' : html`<div class="note">Attiva "Tasse e contributi" in Impostazioni per accantonare le tasse a ogni incasso.</div>`}</div></section>
+    <section class="card"><h2>Liquidità a fine mese</h2>${balanceChart(balanceHistory(st, today, months), [])}${balanceHistory(st, today, months).some((h) => h.partial) ? html`<div class="note">Alcuni conti hanno il saldo "da aggiornare": i mesi con dati parziali non sono tracciati.</div>` : ''}</section>
+    ${wb.started && wb.weeks.length ? html`<section class="card"><h2>Budget settimanale</h2>${budgetChart(wb.weeks, wb.base)}<div class="legend"><span><i class="lg-pos"></i>Dentro il budget</span><span><i class="lg-neg"></i>Sforato</span><span><i class="lg-net"></i>Disponibile (budget + riporto)</span></div></section>` : ''}
+    <section class="card"><h2>Spese per categoria · ${monthLabel(sel)}</h2>${cats.length === 0 ? empty('Nessuna spesa') : html`<ul class="list">${cats.map((c) => html`<li class="item block-item"><div class="row"><span class="tile sm col-${c.color}">${c.icon}</span><div class="grow t">${c.name}</div><div class="num">${amt(c.cents)}</div></div>${prevCats ? html`<div class="small muted">vs mese prima ${delta(c.cents, prevCats[c.id] ?? 0)}</div>` : ''}<div class="hbar"><i class="col-${c.color}" data-w="${Math.round((c.cents / maxCat) * 100)}"></i></div>${c.children?.map((kc) => html`<div class="row small muted sub-row"><span>↳ ${kc.icon} ${kc.name}</span><span class="grow"></span><span class="num">${amt(kc.cents)}</span></div>`)}</li>`)}</ul>`}
+      <div class="note">Le spese non includono investimenti (PAC), pagamenti di imposte e contributi (già coperti dalla riserva) né trasferimenti tra conti.</div></section>
+    ${trend.series.length ? html`<section class="card"><h2>Categorie nel tempo</h2>${stackedChart(trend)}<div class="legend">${trend.series.map((c) => html`<span><i class="col-${c.color}"></i>${c.name}</span>`)}</div></section>` : ''}
+    <section class="card"><h2>Tabella mensile</h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mese</th><th>Incassi</th><th>Spese</th><th>Riserva</th><th>Resta</th></tr></thead><tbody>${[...rep].reverse().map((x) => html`<tr><td>${monthLabel(x.month, true)}</td><td>${formatEuro(x.income)}</td><td>${formatEuro(x.expense)}</td><td>${formatEuro(x.tax)}</td><td>${amt(x.net, { tone: true })}</td></tr>`)}</tbody></table></div></section></div>`;
 }
 
 // ───────────────────────────── Stato dei dati: configurato / previsto / da confermare ─────────────────────────────

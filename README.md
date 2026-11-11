@@ -59,3 +59,9 @@ Pubblica i nuovi file e incrementa `VERSION` in `sw.js`. L'iPhone scarica la nuo
 ## Licenza
 
 Uso personale. Nessuna licenza concessa.
+
+## Analisi, previsioni ed export (v0.7)
+
+- **Analisi**: indicatori medi, entrate/uscite per mese (tocca un mese per il dettaglio), liquidità a fine mese, budget settimanale, categorie nel tempo, tabella mensile; periodo 3/6/12 mesi.
+- **Pianificazione**: liquidità passata + prevista (prudente e con incassi attesi) e previsione mensile di entrate/uscite, incluse le fatture ricorrenti future (mai considerate garantite).
+- **Esporta** (CSV, separatore `;`): statistiche mensili, previsione per mese, previsione dettaglio per movimento. I file **non sono cifrati**.

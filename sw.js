@@ -1,7 +1,7 @@
 // Service worker: solo cache dell'app shell (codice statico). NESSUN dato finanziario transita da qui.
 // Strategia: cache-first versionata. Un nuovo SW resta "in attesa" e subentra quando l'app viene chiusa:
 // non cambia mai il codice sotto i piedi mentre l'archivio è sbloccato.
-const VERSION = 'fp-v0.6.0';
+const VERSION = 'fp-v0.7.0';
 const ASSETS = [
   './',
   'index.html',
@@ -32,6 +32,8 @@ const ASSETS = [
   'src/core/palette.js',
   'src/core/tax.js',
   'src/core/analytics.js',
+  'src/core/reports.js',
+  'src/core/csv.js',
   'src/core/ics.js',
   'src/core/profile.js',
   'src/crypto/b64.js',

@@ -16,6 +16,7 @@ import { formatDate, formatDateLong } from '../core/dates.js';
 import { createBackup, verifyBackup } from '../crypto/backup.js';
 import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { runIntegrityChecks } from '../core/integrity.js';
+import { statsCsv, forecastSummaryCsv, forecastDetailCsv } from '../core/reports.js';
 
 const ACC_TYPES = [['checking', 'Conto corrente'], ['savings', 'Risparmio'], ['cash', 'Contanti'], ['investment', 'Investimento (PAC) · non è liquidità'], ['other', 'Altro']];
 const PRIORITY = [['1', 'Alta'], ['2', 'Media'], ['3', 'Bassa']];
@@ -604,6 +605,22 @@ export function createActions(api) {
       },
     });
   }
+  function reportSheet() {
+    api.openSheet({
+      title: 'Esporta statistiche e previsioni', submit: 'Crea file',
+      body: html`<div class="note">File <b>CSV</b> (si apre in Numbers, Excel, Fogli). <b>Non sono cifrati</b>: contengono i tuoi dati in chiaro; conservali o condividili con attenzione.</div>
+        <label class="field"><span>Cosa esportare</span><select name="what"><option value="stats">Statistiche mensili (incassi, spese, categorie, liquidità)</option><option value="fsum">Previsione: riepilogo per mese (entrate, uscite, saldi)</option><option value="fdet">Previsione: dettaglio di ogni movimento previsto</option></select></label>
+        <label class="field"><span>Periodo</span><select name="months"><option value="6">6 mesi</option><option value="12" selected>12 mesi</option></select></label>
+        <label class="check"><input type="checkbox" name="ack" required><span>Ho capito che il file non è cifrato</span></label>`,
+      onSubmit: async (v) => {
+        const n = Number(v.months), S = st();
+        const [name, text] = v.what === 'stats' ? [`statistiche-${app.today}.csv`, statsCsv(S, app.today, n)] : v.what === 'fsum' ? [`previsione-mensile-${app.today}.csv`, forecastSummaryCsv(S, app.today, n)] : [`previsione-dettaglio-${app.today}.csv`, forecastDetailCsv(S, app.today, n)];
+        const file = new File([text], name, { type: 'text/csv' });
+        if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e?.name === 'AbortError') return; } }
+        saveBlob(name, text, 'text/csv');
+      },
+    });
+  }
   function icsSheet() {
     api.openSheet({
       title: 'Esporta nel Calendario', submit: 'Crea file calendario',
@@ -741,6 +758,9 @@ export function createActions(api) {
     onboarding: onboardingSheet,
     'export-ics': icsSheet,
     rebalance: (el) => rebalance(el.dataset.id),
+    'set-range': (el) => { app.ui.analysisRange = Number(el.dataset.v); api.render(); },
+    'chart-month': (el) => { app.ui.analysisMonth = el.dataset.v; api.render(); },
+    'export-report': reportSheet,
     'set-analysis': (el) => { app.ui.analysisMonth = el.dataset.v; api.render(); },
   };
 

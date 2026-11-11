@@ -2,11 +2,22 @@
 // Le serie "prudent" non li includono; la serie "withExpected" è solo informativa (scenario ottimistico).
 // Le previsioni non toccano mai i saldi reali: sono calcolate al volo, mai memorizzate.
 import { snapshot } from './derive.js';
-import { addDays, addMonths, diffDays } from './dates.js';
+import { addDays, addMonths, diffDays, daysInMonth } from './dates.js';
 import { budgetStatus } from './budget.js';
-import { mulBp } from './money.js';
+import { mulBp, mulRatio } from './money.js';
+import { suggestedSetAside } from './tax.js';
 
 const STEP = { monthly: 1, quarterly: 3, yearly: 12 };
+
+/** Quanto di un incasso previsto NON è liberamente spendibile: riserva fiscale (tua regola, proporzionale se parziale) o regole %. */
+function reserveOf(state, remaining, expected, reserveCents) {
+  const tp = state.settings.taxProfile;
+  if (tp.enabled) {
+    if (reserveCents != null) return Math.min(remaining, expected > 0 ? mulRatio(reserveCents, remaining, expected) : 0);
+    return suggestedSetAside(remaining, tp).setAside;
+  }
+  return state.settings.taxRules.reduce((s, rule) => s + mulBp(remaining, rule.bp), 0);
+}
 const next = (p, cur) => (p.recurrence === 'weekly' ? addDays(cur, 7) : addMonths(cur, STEP[p.recurrence], p.anchorDay));
 
 export function expandPlanned(p, today, horizonEnd) {
@@ -70,8 +81,20 @@ export function forecast(state, today, days = state.settings.forecastDays) {
     if (remaining <= 0) continue;
     if (r.expectedDate < today) { overdue.push(r); continue; }
     if (r.expectedDate > end) continue;
-    const tax = state.settings.taxRules.reduce((s, rule) => s + mulBp(remaining, rule.bp), 0);
-    events.push({ date: r.expectedDate, kind: 'receivable', label: r.client, total: remaining, free: remaining - tax, prudent: false });
+    events.push({ date: r.expectedDate, kind: 'receivable', label: r.client, total: remaining, free: remaining - reserveOf(state, remaining, r.expectedCents, r.reserveCents), prudent: false });
+  }
+  // Fatture ricorrenti OLTRE i mesi già generati: proiettate (non salvate) così la previsione arriva fino all'orizzonte scelto.
+  for (const t of state.invoiceTemplates) {
+    if (t.active === false) continue;
+    for (let i = 0; i <= Math.ceil(days / 28) + 1; i++) {
+      const ym = addMonths(today.slice(0, 7) + '-01', i).slice(0, 7);
+      if (state.receivables.some((r) => r.templateKey === `${t.id}:${ym}`)) continue;     // già generato (anche se incassato o annullato)
+      if (t.createdAt.slice(0, 7) > ym) continue;
+      const day = Math.min(t.invoiceDay, daysInMonth(Number(ym.slice(0, 4)), Number(ym.slice(5))));
+      const expectedDate = addDays(`${ym}-${String(day).padStart(2, '0')}`, t.collectDays);
+      if (expectedDate < today || expectedDate > end) continue;
+      events.push({ date: expectedDate, kind: 'receivable', label: t.client, total: t.cents, free: t.cents - reserveOf(state, t.cents, t.cents, t.reserveCents), prudent: false, projected: true });
+    }
   }
   events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 

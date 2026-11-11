@@ -197,7 +197,17 @@ await q.click('.sheet button[type=submit]'); await q.waitForSelector('.sheet', {
 assert.ok(await q.locator('.acct .tile img').count() >= 1, 'logo mostrato');
 
 step('analisi guadagni vs costi');
-await q.click('button[data-nav=analysis]'); await q.waitForSelector('.kpi'); await q.waitForTimeout(400); await qshot('25-analisi');
+await q.click('button[data-nav=analysis]'); await q.waitForSelector('svg.chart'); await q.waitForTimeout(400); await qshot('25-analisi');
+assert.ok(await q.locator('svg.chart').count() >= 2, 'grafici presenti');
+const mm = q.locator('svg.chart g[data-action=chart-month]'); const nm = await mm.count(); assert.ok(nm >= 3);
+await mm.nth(nm - 2).dispatchEvent('click'); await q.waitForTimeout(300);
+assert.ok((await q.locator('.chart-detail').innerText()).length > 20, 'dettaglio mese');
+await q.click('button[data-action=set-range][data-v="12"]'); await q.waitForTimeout(200); assert.equal(await q.locator('svg.chart g[data-action=chart-month]').count(), 12);
+await q.click('.topbar button[data-action=export-report]'); await q.waitForSelector('.sheet');
+await q.selectOption('.sheet select[name=what]', 'fsum'); await q.check('.sheet input[name=ack]');
+const [dlCsv] = await Promise.all([q.waitForEvent('download'), q.click('.sheet button[type=submit]')]);
+const csvText = await (await import('node:fs/promises')).readFile(await dlCsv.path(), 'utf8');
+assert.ok(csvText.startsWith('\uFEFFMese;') && csvText.includes('Entrate previste'), 'CSV previsione'); await q.waitForSelector('.sheet', { state: 'detached' }).catch(() => {});
 await q.click('.tab[data-nav=overview]'); await q.waitForTimeout(300); await qshot('26-panoramica-autonomo');
 await q.evaluate(() => { location.hash = '#/settings/tax'; }); await q.waitForSelector('text=Quattro numeri'); await q.waitForTimeout(300); await qshot('28-tasse-annuale');
 await q.evaluate(() => { location.hash = '#/overview'; });
