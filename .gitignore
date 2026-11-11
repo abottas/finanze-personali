@@ -1,0 +1,8 @@
+node_modules/
+*.fpbak
+*.csv
+.DS_Store
+# Dati personali: MAI nel repository (profilo iniziale, backup, esportazioni, calendari)
+profilo-personale*.json
+*.personal.json
+*.ics

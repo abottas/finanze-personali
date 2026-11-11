@@ -1,0 +1,13 @@
+{
+  "name": "finanze-personali",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "PWA offline-first, cifrata, per finanze personali (uso privato, solo iPhone).",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "check:sw": "node scripts/check-sw.mjs",
+    "serve": "node scripts/serve.mjs"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,31 @@
+{
+  "format": "FP-PROFILE",
+  "v": 1,
+  "label": "Profilo di ESEMPIO con dati inventati (non è un profilo reale)",
+  "accounts": [
+    { "key": "acc_in", "name": "Banca Accrediti", "bank": "isybank", "role": "Accredito dei compensi" },
+    { "key": "acc_daily", "name": "Banca Spese", "bank": "revolut", "role": "Spese quotidiane" },
+    { "key": "acc_tax", "name": "Broker Tasse", "bank": "trade_republic", "role": "Riserva fiscale e PAC" },
+    { "key": "acc_save", "name": "Banca Risparmio", "bank": "bbva", "role": "Risparmio e obiettivi" },
+    { "key": "acc_extra", "name": "Banca Extra", "bank": "buddybank", "role": "Liquidità aggiuntiva", "openingCents": 5000 }
+  ],
+  "taxProfile": { "coefficientBp": 7800, "inpsBp": 2607, "taxBp": 500, "roundStepCents": 1000, "fundKey": "f_tax" },
+  "budget": { "weeklyCents": 20000 },
+  "funds": [
+    { "key": "f_tax", "name": "Riserva fiscale", "kind": "tax", "accountKey": "acc_tax", "icon": "🧾", "color": "amber" },
+    { "key": "f_refill", "name": "Reintegro riserva fiscale", "kind": "goal", "accountKey": "acc_tax", "provisional": true, "goal": { "targetCents": 60000, "priority": 1 } },
+    { "key": "f_trip", "name": "Viaggio", "kind": "goal", "accountKey": "acc_save", "icon": "✈️", "goal": { "targetCents": 100000, "priority": 2, "deadline": "2026-12-30" } },
+    { "key": "f_clothes", "name": "Abbigliamento viaggio", "kind": "goal", "accountKey": "acc_save", "parentKey": "f_trip", "goal": { "targetCents": 15000, "minCents": 10000, "priority": 2 } },
+    { "key": "f_buffer", "name": "Cuscinetto", "kind": "goal", "accountKey": "acc_save", "goal": { "targetCents": 40000, "priority": 3 } },
+    { "key": "f_car", "name": "Obiettivo A", "kind": "goal", "accountKey": "acc_save", "goal": { "targetCents": null, "priority": 3 } }
+  ],
+  "invoiceTemplates": [
+    { "client": "Cliente A", "cents": 120000, "reserveCents": 30000, "invoiceDay": 27, "collectDays": 12, "accountKey": "acc_in" },
+    { "client": "Cliente B", "cents": 60000, "reserveCents": 15000, "invoiceDay": 27, "collectDays": 12, "accountKey": "acc_in", "review": true, "note": "Rapporto da verificare" }
+  ],
+  "planned": [
+    { "name": "Corso", "kind": "subscription", "cents": 12000, "recurrence": "monthly", "accountKey": "acc_daily", "categoryId": "cat_fun" },
+    { "name": "PAC", "kind": "investment", "cents": 10000, "recurrence": "monthly", "accountKey": "acc_tax", "categoryId": "cat_invest" },
+    { "name": "Assicurazione", "kind": "subscription", "cents": 8000, "recurrence": "monthly", "accountKey": "acc_daily", "categoryId": "cat_insurance", "confirm": "active" }
+  ]
+}
