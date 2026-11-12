@@ -98,6 +98,10 @@ step('fisco: quattro numeri separati e aliquote "da verificare"');
 await g.evaluate(() => { location.hash = '#/settings/tax'; }); await g.waitForSelector('text=Quattro numeri'); await g.waitForTimeout(300); await gshot('37-tasse-quattro-numeri');
 await g.click('button[data-action=tax-opening]'); await g.waitForSelector('.sheet');
 await g.fill('.sheet input[name=ricavi]', '10000'); await g.fill('.sheet input[name=inps]', '1000'); await g.fill('.sheet input[name=imp]', '200');
+// regressione: campi facoltativi vuoti devono poter essere salvati
+await g.fill('.sheet input[name=inps]', ''); await g.fill('.sheet input[name=imp]', '');
+await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' }); await g.waitForTimeout(300);
+await g.click('button[data-action=tax-opening]'); await g.waitForSelector('.sheet'); await g.fill('.sheet input[name=inps]', '1000'); await g.fill('.sheet input[name=imp]', '200');
 await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' }); await g.waitForTimeout(300);
 assert.ok((await g.locator('.screen').innerText()).includes('inserito a mano'), 'dati iniziali mostrati'); await gshot('37b-tasse-incassato');
 const tx4 = await g.textContent('.screen');

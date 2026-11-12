@@ -28,6 +28,7 @@ const bpOf = (v, label) => { const x = Number(String(v ?? '').trim().replace(','
 const pctStr = (bp) => String(bp / 100).replace('.', ',');
 
 const money = (v, label = 'Importo', { zero = false } = {}) => {
+  if (zero && String(v ?? '').trim() === '') return 0;   // campo facoltativo lasciato vuoto = 0
   const c = parseEuro(String(v ?? ''));
   if (c == null) throw new AppError('importo', `${label} non valido (usa ad es. 1.234,56)`);
   if (!zero && c <= 0) throw new AppError('importo', `${label} deve essere maggiore di zero`);
@@ -682,11 +683,11 @@ export function createActions(api) {
       const y = Number(app.today.slice(0, 4)), o = st().settings.taxProfile.opening?.year === y ? st().settings.taxProfile.opening : null;
       api.openSheet({
         title: `Già maturato nel ${y}`, submit: 'Salva',
-        body: html`<div class="note">Inserisci quanto hai <b>incassato</b> e <b>versato</b> dal 1° gennaio fino al giorno indicato, cioè prima di cominciare a registrare qui. I movimenti dell'app fino a quel giorno non vengono contati due volte.</div>
+        body: html`<div class="note">Inserisci quanto hai <b>incassato</b> dal 1° gennaio fino al giorno indicato, cioè prima di cominciare a registrare qui: da quello l'app calcola <b>contributi INPS e imposta</b>. Se hai anche già <b>versato</b> qualcosa (INPS o acconti), aggiungilo sotto; se è il primo anno e non hai versato nulla, <b>lascia vuoto</b>. I movimenti dell'app fino a quel giorno non vengono contati due volte.</div>
           ${field('until', 'Fino al giorno (incluso)', { type: 'date', value: o?.untilDate ?? app.today, attrs: `min="${y}-01-01" max="${app.today}" required` })}
-          ${moneyField('ricavi', 'Incassato (compensi ricevuti)', o?.ricaviCents ?? null, { required: false, hint: 'Solo incassi reali (soldi arrivati), non fatture emesse e non ancora pagate.' })}
-          ${moneyField('inps', 'Contributi INPS già versati', o?.inpsPaidCents ?? null, { required: false })}
-          ${moneyField('imp', 'Imposta sostitutiva già versata (acconti)', o?.impostaPaidCents ?? null, { required: false })}
+          ${moneyField('ricavi', 'Incassato (compensi ricevuti)', o?.ricaviCents ?? null, { required: false, hint: 'Conta solo ciò che ti è davvero arrivato: una fattura emessa ma non ancora pagata dal cliente non va inclusa (si tassa quando la incassi).' })}
+          ${moneyField('inps', 'Contributi INPS già versati (facoltativo)', o?.inpsPaidCents ?? null, { required: false, hint: 'Lascia vuoto se non hai ancora versato nulla.' })}
+          ${moneyField('imp', 'Imposta sostitutiva già versata (facoltativo)', o?.impostaPaidCents ?? null, { required: false, hint: 'Acconti già pagati. Il primo anno di solito è vuoto.' })}
           ${o ? html`<button type="button" class="btn danger block mt8" data-action="tax-opening-clear">Rimuovi questi dati</button>` : ''}`,
         onSubmit: async (v) => { await api.commit((s, c) => C.setTaxOpening(s, c, { year: y, untilDate: v.until, ricaviCents: money(v.ricavi, 'Incassato', { zero: true }), inpsPaidCents: money(v.inps, 'INPS', { zero: true }), impostaPaidCents: money(v.imp, 'Imposta', { zero: true }) })); api.toast('Dati salvati'); },
       });
