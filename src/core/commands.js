@@ -97,12 +97,36 @@ function checkTxFields(s, ctx, t, snapExcludingId = null) {
   }
 }
 
+/**
+ * Reintegro: se un fondo è collegato a un fondo "di reintegro" (refillFundId), ogni spesa PAGATA da quel fondo
+ * (denaro anticipato) alza di pari importo l'obiettivo del fondo di reintegro. Il valore applicato è memorizzato sul
+ * movimento (refillFundId/refillCents): modifica o annullamento lo riportano indietro esattamente.
+ */
+function syncRefill(s, t, log) {
+  const f = t.status === 'posted' && t.kind === 'expense' && t.fundId ? s.funds.find((x) => x.id === t.fundId) : null;
+  const wantId = f?.refillFundId ?? null;
+  const want = wantId ? -t.cents : 0;
+  const haveId = t.refillFundId ?? null, have = t.refillCents ?? 0;
+  if (haveId === wantId && have === want) return;
+  const bump = (id, delta, note) => {
+    const rf = s.funds.find((x) => x.id === id);
+    if (!rf || rf.kind !== 'goal' || !rf.goal || delta === 0) return;
+    const before = copy(rf);
+    rf.goal.targetCents = Math.max(0, (rf.goal.targetCents ?? 0) + delta);
+    log('update', 'fund', rf.id, before, copy(rf), note);
+  };
+  if (haveId && have) bump(haveId, -have, 'Reintegro ricalcolato: movimento modificato o annullato');
+  if (wantId && want) bump(wantId, want, `Reintegro: pagato dal fondo "${f.name}"`);
+  if (wantId) { t.refillFundId = wantId; t.refillCents = want; } else { delete t.refillFundId; delete t.refillCents; }
+}
+
 export function addTransaction(state, ctx, { accountId, date = ctx.today, cents, kind, categoryId = null, fundId = null, note = '', receivableId = null, plannedId = null }) {
   return mutate(state, ctx, (s, log) => {
     req(['income', 'expense', 'investment', 'adjustment'].includes(kind), 'tipo', 'Tipo di movimento non valido');
     const t = { id: ctx.newId(), accountId, date, cents, kind, categoryId, fundId, receivableId, plannedId, note: cleanNote(note), status: 'posted', voidReason: null, createdAt: ctx.nowIso, updatedAt: ctx.nowIso };
     checkTxFields(s, ctx, t);
     s.transactions.push(t);
+    syncRefill(s, t, log);
     log('create', 'transaction', t.id, null, t);
     linkBudget(s, ctx, t, log);
     return t.id;
@@ -157,6 +181,7 @@ export function updateTransaction(state, ctx, id, patch) {
       const r = find(s.receivables, t.receivableId, 'Incasso');
       r.receivedCents = t.cents; r.receivedDate = t.date; r.accountId = t.accountId;
     }
+    syncRefill(s, t, log);
     log('update', 'transaction', id, before, copy(t));
     if (budgetLinked || (!t.fundId && patch.cents !== undefined)) linkBudget(s, ctx, t, log);
   });
@@ -171,6 +196,7 @@ export function voidTransaction(state, ctx, id, reason) {
     t.status = 'void';
     t.voidReason = needReason(reason);
     t.updatedAt = ctx.nowIso;
+    syncRefill(s, t, log);
     log('void', 'transaction', id, before, copy(t), t.voidReason);
     if (t.receivableId) {
       const r = s.receivables.find((x) => x.id === t.receivableId);
@@ -228,18 +254,18 @@ export function voidTransfer(state, ctx, id, reason) {
 // ───────────────────── Fondi virtuali e allocazioni ─────────────────────
 // Le allocazioni NON muovono denaro in banca: sono vincoli contabili interni a un conto.
 const DEF_FUND_LOOK = { tax: ['amber', '🧾'], goal: ['indigo', '⭐'], planned: ['purple', '🛍️'], reserve: ['gray', '💰'] };
-export function addFund(state, ctx, { name, kind = 'reserve', accountId, goal = null, color = null, icon = null, parentId = null, provisional = false, origin = null }) {
+export function addFund(state, ctx, { name, kind = 'reserve', accountId, goal = null, color = null, icon = null, parentId = null, provisional = false, origin = null, refillFundId = null }) {
   return mutate(state, ctx, (s, log) => {
     req(['goal', 'tax', 'reserve'].includes(kind), 'tipo_fondo', 'Tipo di fondo non valido');
     const acc = find(s.accounts, accountId, 'Conto');
     req(!acc.archived, 'conto_archiviato', 'Il conto è archiviato');
-    const f = { id: ctx.newId(), name: needName(name), kind, accountId, goal: kind === 'goal' ? (goal ? { minCents: null, ...goal } : null) : null, plannedId: null, archived: false, createdAt: ctx.nowIso, parentId, provisional: !!provisional, origin, color: color && COLOR_KEYS.includes(color) ? color : DEF_FUND_LOOK[kind][0], icon: icon ? String(icon).slice(0, 12) : DEF_FUND_LOOK[kind][1] };
+    const f = { id: ctx.newId(), name: needName(name), kind, accountId, goal: kind === 'goal' ? (goal ? { minCents: null, ...goal } : null) : null, plannedId: null, archived: false, createdAt: ctx.nowIso, parentId, provisional: !!provisional, origin, refillFundId: refillFundId ?? null, color: color && COLOR_KEYS.includes(color) ? color : DEF_FUND_LOOK[kind][0], icon: icon ? String(icon).slice(0, 12) : DEF_FUND_LOOK[kind][1] };
     s.funds.push(f);
     log('create', 'fund', f.id, null, f);
     return f.id;
   });
 }
-export function updateFund(state, ctx, id, { name, goal, color, icon }) {
+export function updateFund(state, ctx, id, { name, goal, color, icon, refillFundId }) {
   return mutate(state, ctx, (s, log) => {
     const f = find(s.funds, id, 'Fondo');
     const before = copy(f);
@@ -247,6 +273,10 @@ export function updateFund(state, ctx, id, { name, goal, color, icon }) {
     if (color !== undefined && COLOR_KEYS.includes(color)) f.color = color;
     if (icon !== undefined && icon) f.icon = String(icon).slice(0, 12);
     if (goal !== undefined) { req(f.kind === 'goal', 'non_obiettivo', 'Solo gli obiettivi hanno un importo target'); f.goal = goal; }
+    if (refillFundId !== undefined) {
+      if (refillFundId) { const rf = find(s.funds, refillFundId, 'Fondo di reintegro'); req(rf.kind === 'goal' && !rf.archived && rf.id !== f.id, 'reintegro_non_valido', 'Il fondo di reintegro deve essere un obiettivo attivo, diverso da questo fondo'); }
+      f.refillFundId = refillFundId || null;
+    }
     log('update', 'fund', id, before, copy(f));
   });
 }
@@ -948,6 +978,7 @@ export function applyProfile(state, ctx, profile) {
       s.funds.push(fund); fundId[f.key] = fund.id;
       log('create', 'fund', fund.id, null, fund, 'Dal profilo personale · non finanziato');
     }
+    for (const f of profile.funds ?? []) { if (f.refillKey) s.funds.find((x) => x.id === fundId[f.key]).refillFundId = fundId[f.refillKey] ?? null; }
     if (profile.taxProfile) {
       const before = copy(s.settings.taxProfile);
       const t = profile.taxProfile;

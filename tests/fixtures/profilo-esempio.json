@@ -60,7 +60,8 @@
       "kind": "tax",
       "accountKey": "acc_tax",
       "icon": "🧾",
-      "color": "amber"
+      "color": "amber",
+      "refillKey": "f_refill"
     },
     {
       "key": "f_refill",

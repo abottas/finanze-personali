@@ -95,7 +95,7 @@ export function migrateState(st) {
   for (const c of st.categories ?? []) { c.icon ??= catDefaults[c.id]?.icon ?? '🏷️'; c.color ??= catDefaults[c.id]?.color ?? 'gray'; c.parentId ??= catDefaults[c.id]?.parentId ?? null; }
   for (const id of Object.keys(catDefaults)) if (!(st.categories ?? []).some((c) => c.id === id)) st.categories.push(structuredClone(catDefaults[id]));
   for (const a of st.accounts ?? []) { a.bank ??= null; a.color ??= null; a.emoji ??= null; a.logo ??= null; a.role ??= null; a.balanceUnknown ??= false; a.origin ??= null; }
-  for (const f of st.funds ?? []) { f.color ??= { tax: 'amber', goal: 'indigo', planned: 'purple', reserve: 'gray' }[f.kind] ?? 'gray'; f.icon ??= { tax: '🧾', goal: '⭐', planned: '🛍️', reserve: '💰' }[f.kind] ?? '💰'; f.parentId ??= null; f.provisional ??= false; f.origin ??= null; if (f.goal) { f.goal.minCents ??= null; } }
+  for (const f of st.funds ?? []) { f.color ??= { tax: 'amber', goal: 'indigo', planned: 'purple', reserve: 'gray' }[f.kind] ?? 'gray'; f.icon ??= { tax: '🧾', goal: '⭐', planned: '🛍️', reserve: '💰' }[f.kind] ?? '💰'; f.parentId ??= null; f.provisional ??= false; f.refillFundId ??= null; f.origin ??= null; if (f.goal) { f.goal.minCents ??= null; } }
   delete st.settings.taxProfile.deductInps; // la deduzione dei contributi si calcola sul dato annuale reale, non per singola fattura
   for (const t of st.transfers ?? []) { t.purpose ??= null; t.fundId ??= null; t.plannedId ??= null; }
   // Gli investimenti (PAC) non sono spese di consumo: cambiano tipo di movimento.

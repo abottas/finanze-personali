@@ -51,3 +51,6 @@ non cambia nulla.
   in proporzione o usare la stima del profilo fiscale. Vale per **quella fattura**: la regola dei mesi futuri non cambia mai da sola.
 * **Compenso straordinario** (senza regola): riserva suggerita dal profilo fiscale, sempre modificabile.
 * Tutto resta **virtuale** finché non confermi il bonifico reale (vedi "Bonifici da confermare").
+
+## Reintegro automatico (v0.8)
+Un fondo può avere `"refillKey": "<chiave di un obiettivo>"`. Quando paghi una spesa direttamente da quel fondo (es. dal fondo tasse), l'obiettivo del fondo di reintegro aumenta dello stesso importo; annullando o correggendo la spesa il reintegro torna com'era. Nell'app: Fondi → fondo → Modifica → "Reintegro automatico".

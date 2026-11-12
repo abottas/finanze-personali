@@ -32,6 +32,7 @@ export function validateProfile(p) {
     if (!['tax', 'goal', 'reserve'].includes(f.kind)) bad(`fondo ${f.key}: tipo non valido`);
     if (!acc.has(f.accountKey)) bad(`fondo ${f.key}: conto inesistente`);
     if (f.parentKey != null && !fk.has(f.parentKey)) bad(`fondo ${f.key}: fondo madre inesistente`);
+    if (f.refillKey != null && !fk.has(f.refillKey)) bad(`fondo ${f.key}: fondo di reintegro inesistente`);
     if (f.kind === 'goal') {
       const g = f.goal ?? {};
       if (g.targetCents != null && (!isCents(g.targetCents) || g.targetCents <= 0)) bad(`fondo ${f.key}: obiettivo non valido`);

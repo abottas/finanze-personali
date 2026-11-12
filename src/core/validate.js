@@ -88,6 +88,7 @@ export function validateState(st) {
     }
     if (f.kind === 'goal' && !f.goal) bad(`fondo ${f.id}: obiettivo mancante`);
     if (f.parentId != null && (!has('funds', f.parentId) || f.parentId === f.id)) bad(`fondo ${f.id}: fondo madre non valido`);
+    if (f.refillFundId != null) { const rf = st.funds.find((x) => x.id === f.refillFundId); if (!rf || rf.kind !== 'goal' || rf.id === f.id) bad(`fondo ${f.id}: fondo di reintegro non valido`); }
     if (!okColor(f.color) || !okIcon(f.icon)) bad(`fondo ${f.id}: aspetto non valido`);
   }
   for (const a of st.allocations) {
