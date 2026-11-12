@@ -732,8 +732,19 @@ export function createActions(api) {
       const f = byId('funds', el.dataset.id);
       const others = accOpts().filter(([id]) => id !== f.accountId);
       if (!others.length) { api.toast('Serve un altro conto', true); return; }
-      const av = snap().funds[f.id].available;
-      api.openSheet({ title: `Sposta "${f.name}" su un altro conto`, submit: 'Confermo il bonifico e sposto', body: html`${select('to', 'Nuovo conto', others, others[0][0])}<div class="note">Cambia il conto di riferimento del fondo. Premendo il pulsante <b>confermi di aver già fatto il bonifico</b> di ${formatEuro(av)} verso il nuovo conto: verrà registrato come trasferimento reale e la riserva lo seguirà.</div>`, onSubmit: async (v) => { await api.commit((s, c) => C.relocateFund(s, c, f.id, v.to)); api.toast('Fondo spostato'); } });
+      const parts = Object.entries(snap().funds[f.id].byAccount).filter(([, c]) => c > 0).map(([id, c]) => [byId('accounts', id), c]);
+      api.openSheet({
+        title: `Sposta "${f.name}" su un altro conto`, submit: 'Confermo i bonifici e sposto',
+        body: html`${select('to', 'Nuovo conto', others, others[0][0])}
+          <div class="field"><span>Quali parti hai già spostato con un bonifico?</span>${parts.map(([a, c]) => html`<label class="check"><input type="checkbox" name="mv_${a.id}" checked><span>Quella su <b>${a.name}</b>: ${formatEuro(c)}</span></label>`)}
+          <small class="hint">Spunta solo ciò che hai <b>davvero bonificato</b> sul nuovo conto. La parte che già si trova sul nuovo conto non serve e viene ignorata; ciò che lasci senza spunta resta riservato dov'è e comparirà come "bonifico da fare".</small></div>
+          <div class="note">Per ogni parte spuntata registro <b>un bonifico reale</b> dal suo conto verso il nuovo (non un unico bonifico dell'importo totale). Il conto di riferimento del fondo cambia${f.kind === 'budget' ? ' e con lui il conto spese del budget' : ''}.</div>`,
+        onSubmit: async (v) => {
+          const onlyFrom = parts.filter(([a]) => v['mv_' + a.id] === 'on').map(([a]) => a.id);
+          await api.commit((s, c) => C.relocateFund(s, c, f.id, v.to, { onlyFrom }));
+          api.toast('Fondo spostato');
+        },
+      });
     },
     'close-fund': (el) => { const f = byId('funds', el.dataset.id); confirmSheet({ title: 'Chiudi fondo', text: `Il disponibile (${formatEuro(snap().funds[f.id].available)}) torna al denaro libero. Il fondo resta nello storico.`, label: 'Chiudi fondo', run: async () => { await api.commit((s, c) => C.closeFund(s, c, f.id)); } }); },
     'new-receivable': () => (accOpts().length ? receivableSheet() : api.toast('Aggiungi prima un conto', true)),

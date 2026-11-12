@@ -66,6 +66,12 @@ await g.waitForFunction(() => /Settimane finanziate in anticipo\s*2/.test(docume
 await g.click('button[data-action=budget-advance]'); await g.waitForSelector('.sheet'); await g.selectOption('.sheet select[name=weeks]', '0');
 await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' });
 await g.evaluate(() => { location.hash = '#/overview'; }); await g.waitForTimeout(300);
+step('Sposta fondo: elenco per conto con spunte, un bonifico per parte');
+await g.evaluate(() => { location.hash = '#/overview'; }); await g.waitForTimeout(300);
+await g.locator('button[data-action=fund]', { hasText: 'Budget settimanale' }).first().click(); await g.waitForSelector('.sheet');
+await g.click('.sheet button[data-action=relocate-fund]'); await g.waitForSelector('.sheet input[type=checkbox][name^=mv_]');
+assert.ok((await g.locator('.sheet').innerText()).includes('Quella su'), 'parti per conto'); await gshot('41e-sposta-fondo');
+await g.click('.sheet button[data-action=close-sheet] >> nth=-1'); await g.waitForSelector('.sheet', { state: 'detached' });
 step('SCADENZE finanziate in anticipo: attivazione, riserva, stato di copertura in Pianificazione');
 await g.evaluate(() => { location.hash = '#/settings/budget'; }); await g.waitForSelector('button[data-action=planned-funding]');
 await g.click('button[data-action=planned-funding]'); await g.waitForSelector('.sheet');

@@ -414,13 +414,18 @@ export function closeFund(state, ctx, id) {
   });
 }
 /** Cambia il conto di riferimento del fondo e, con un bonifico confermato, sposta tutta la riserva esistente. */
-export function relocateFund(state, ctx, id, newAccountId) {
+export function relocateFund(state, ctx, id, newAccountId, { onlyFrom = null } = {}) {
   return mutate(state, ctx, (s, log) => {
     const f = find(s.funds, id, 'Fondo');
     const to = find(s.accounts, newAccountId, 'Conto di destinazione');
     req(f.accountId !== to.id && !to.archived, 'conto', 'Scegli un conto diverso e attivo');
+    const b = s.settings.budget;
+    const isBudget = f.id === b.fundId;
+    req(!(isBudget && b.sourceAccountId === to.id && b.advanceWeeks > 0), 'conto_appoggio', 'Questo è anche il conto di appoggio delle settimane in anticipo: cambia prima quello');
+    // Si sposta (con un bonifico registrato PER CIASCUN conto) solo la parte riservata su conti diversi dalla destinazione e, se indicato, tra quelli scelti.
     for (const [acc, c] of Object.entries(snapshot(s).funds[id].byAccount)) {
       if (acc === to.id || c <= 0) continue;
+      if (onlyFrom && !onlyFrom.includes(acc)) continue;
       const from = find(s.accounts, acc, 'Conto di origine');
       req(ctx.today >= to.openingDate && ctx.today >= from.openingDate, 'data_prima_apertura', 'Un conto non era ancora aperto');
       const tr = { id: ctx.newId(), fromAccountId: acc, toAccountId: to.id, cents: c, date: ctx.today, note: `Spostamento fondo "${f.name}"`, purpose: 'fund', fundId: f.id, plannedId: null, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
@@ -433,6 +438,12 @@ export function relocateFund(state, ctx, id, newAccountId) {
     const before = copy(f);
     f.accountId = to.id;
     log('relocate', 'fund', id, before, copy(f));
+    if (isBudget) {                                      // il conto spese del budget segue il fondo, altrimenti le spese non lo consumerebbero
+      const bb = copy(b);
+      b.accountId = to.id;
+      if (b.sourceAccountId === to.id) b.sourceAccountId = null;
+      log('update', 'budget', 'budget', bb, copy(b), 'Conto spese del budget cambiato');
+    }
   });
 }
 

@@ -237,3 +237,24 @@ test('anticipo: la previsione non conta due volte le settimane già finanziate',
   assert.ok(fut(noAdv).every((e) => e.free < 0));
   assert.equal(fut(adv)[0].total, -22000);                                   // ma il totale di cassa esce comunque
 });
+
+// ───── Spostare il fondo su un altro conto ─────
+test('sposta il budget: un bonifico per ciascun conto (non uno da 880), solo le parti spuntate; il conto spese del budget segue il fondo', async () => {
+  let { s, rev, isy, fund: f } = await setup({ cash: 10000 });
+  const bud = await C.addAccount(s, ctx(), { name: 'Buddy', openingCents: 100000, openingDate: '2026-01-01' }); s = bud.state; const buddy = bud.result;
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: buddy })).state;
+  s = (await run(s, W1, { force: true })).state;
+  assert.equal(byAcc(s, f, rev), 10000); assert.equal(byAcc(s, f, buddy), 78000);
+  // sposto verso Isybank SOLO la parte che sta su Buddy
+  const out = await C.relocateFund(s, ctx(), f, isy, { onlyFrom: [buddy] }); s = out.state;
+  assert.deepEqual(s.transfers.map((t) => [t.fromAccountId, t.toAccountId, t.cents]), [[buddy, isy, 78000]]);
+  assert.equal(byAcc(s, f, isy), 78000); assert.equal(byAcc(s, f, rev), 10000);        // la parte su Revolut non è stata toccata
+  assert.equal(s.settings.budget.accountId, isy);                                       // il conto spese del budget ha seguito il fondo
+  assert.deepEqual(pendingTransfers(s, snapshot(s)).map((p) => [p.fromAccountId, p.cents]), [[rev, 10000]]);   // il resto resta "bonifico da fare"
+  assert.deepEqual(validateState(s), []); assert.equal((await runIntegrityChecks(s)).ok, true);
+});
+test('sposta il budget: se la destinazione è il conto di appoggio delle settimane in anticipo si rifiuta', async () => {
+  let { s, isy, fund: f } = await setup({ cash: 10000 });
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
+  await expectError(C.relocateFund(s, ctx(), f, isy), 'conto_appoggio');
+});
