@@ -1008,6 +1008,26 @@ export function runBudgetFunding(state, ctx, { force = false } = {}) {
     return res;
   });
 }
+/**
+ * Cambia il CONTO SPESE del budget (dove sta la settimana corrente e da cui spendi) senza registrare bonifici:
+ * cambia solo il conto di riferimento del fondo. Le riserve già presenti su altri conti restano dove sono
+ * (la parte oltre le settimane in anticipo comparirà come "bonifico da fare").
+ */
+export function setBudgetAccount(state, ctx, { accountId }) {
+  return mutate(state, ctx, (s, log) => {
+    const b = s.settings.budget;
+    req(b.fundId, 'non_attivo', 'Attiva prima il finanziamento del budget');
+    const acc = find(s.accounts, accountId, 'Conto spese');
+    req(!acc.archived && acc.type !== 'investment', 'conto_non_valido', 'Scegli un conto liquido');
+    req(acc.id !== b.accountId, 'conto', 'È già il conto spese del budget');
+    req(!(b.advanceWeeks > 0 && b.sourceAccountId === acc.id), 'conto_appoggio', 'Questo è il conto delle settimane in anticipo: cambia prima quello');
+    const f = find(s.funds, b.fundId, 'Fondo budget');
+    const fb = copy(f), bb = copy(b);
+    f.accountId = acc.id; b.accountId = acc.id;
+    log('update', 'fund', f.id, fb, copy(f), 'Conto spese del budget cambiato (nessun bonifico registrato)');
+    log('update', 'budget', 'budget', bb, copy(b), 'Conto spese del budget cambiato');
+  });
+}
 /** Finanzia in anticipo da 0 a 4 settimane future usando il denaro libero di un conto di appoggio (virtuale finché non confermi il bonifico). */
 export function setBudgetAdvance(state, ctx, { weeks, sourceAccountId = null }) {
   return mutate(state, ctx, (s, log) => {

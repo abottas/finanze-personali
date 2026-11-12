@@ -258,3 +258,25 @@ test('sposta il budget: se la destinazione è il conto di appoggio delle settima
   s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
   await expectError(C.relocateFund(s, ctx(), f, isy), 'conto_appoggio');
 });
+
+test('conto spese del budget: si cambia senza bonifici; "Finanzia" non prende più dal vecchio conto', async () => {
+  let { s, rev, isy, fund: f } = await setup({ cash: 0 });                 // conto spese = Revolut (0 €), Isybank 1.000 €
+  const bb = await C.addAccount(s, ctx(), { name: 'BBVA', openingCents: 500000, openingDate: '2026-01-01' }); s = bb.state; const bbva = bb.result;
+  s = (await C.setBudgetAccount(s, ctx(), { accountId: bbva })).state;       // per errore finisce su BBVA
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: isy })).state;
+  s = (await run(s, W1, { force: true })).state;
+  assert.equal(byAcc(s, f, bbva), 22000);                                      // la settimana corrente la prende da BBVA
+  s = (await C.releaseFromFund(s, ctx(), f, 22000, '', bbva)).state;
+  s = (await C.setBudgetAccount(s, ctx(), { accountId: rev })).state;
+  assert.equal(s.transfers.length, 0); assert.equal(s.settings.budget.accountId, rev);
+  assert.equal(s.funds.find((x) => x.id === f).accountId, rev);
+  const out = await run(s, W1, { force: true }); s = out.state;
+  assert.equal(byAcc(s, f, bbva), 0);                                          // BBVA non viene più toccata
+  assert.equal(byAcc(s, f, isy), 88000 - byAcc(s, f, rev));                    // tutto il resto da Isybank
+  assert.deepEqual(validateState(s), []);
+});
+test('conto spese del budget: non può coincidere col conto delle settimane in anticipo', async () => {
+  let { s, isy } = await setup({ cash: 10000 });
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
+  await expectError(C.setBudgetAccount(s, ctx(), { accountId: isy }), 'conto_appoggio');
+});

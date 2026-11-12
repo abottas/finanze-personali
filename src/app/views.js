@@ -448,7 +448,8 @@ function settingsBudget(app, back) {
       <div class="note">Contano le uscite effettive in categorie "nel budget" (non le scadenze programmate come corso o abbonamenti, che sono impegni a parte).</div></section>
     <section class="card"><h2>Finanziamento del budget ${b.fundId ? pill('attivo', 'pos') : pill('non attivo')}</h2>
       ${b.fundId ? html`<p class="small mt0">Ogni settimana l'app <b>riserva</b> il budget dal denaro libero di <b>${st.accounts.find((a) => a.id === b.accountId)?.name}</b>: i soldi restano sul conto ma non sono più "liberi". Le spese del budget consumano il fondo. <b>Avanzo</b> riportato; <b>sforo</b> sottratto dalla settimana dopo. Mai oltre il denaro libero: se non basta, ti dice quanto manca.</p>
-        <div class="kv mt8"><span class="k">Settimane finanziate in anticipo</span><span>${b.advanceWeeks ? `${b.advanceWeeks} · da ${st.accounts.find((a) => a.id === b.sourceAccountId)?.name ?? '—'}` : 'nessuna'}</span></div>
+        <div class="kv mt8"><span class="k">Conto spese (settimana corrente)</span><span>${st.accounts.find((a) => a.id === b.accountId)?.name ?? '—'} <button class="link-btn small" data-action="budget-account">Cambia</button></span>
+        <span class="k">Settimane finanziate in anticipo</span><span>${b.advanceWeeks ? `${b.advanceWeeks} · da ${st.accounts.find((a) => a.id === b.sourceAccountId)?.name ?? '—'}` : 'nessuna'}</span></div>
         <div class="btn-row"><button class="btn primary" data-action="budget-fund-now">Finanzia ora</button><button class="btn" data-action="budget-advance">Settimane in anticipo</button></div>
         <div class="spacer10"></div><button class="btn danger block" data-action="budget-fund-off">Disattiva</button>`
       : html`<p class="small mt0">Con 500 € in conto e un budget di 220 €, i 220 vanno <b>riservati</b>: il libero vero è 280. Attiva il finanziamento per trattare il budget come un fondo, ogni settimana.</p>

@@ -63,6 +63,9 @@ await g.evaluate(() => { location.hash = '#/settings/budget'; }); await g.waitFo
 await g.click('button[data-action=budget-advance]'); await g.waitForSelector('.sheet');
 await g.selectOption('.sheet select[name=weeks]', '2'); await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' });
 await g.waitForFunction(() => /Settimane finanziate in anticipo\s*2/.test(document.body.textContent)); await gshot('41b-budget-anticipo');
+await g.click('button[data-action=budget-account]'); await g.waitForSelector('.sheet select[name=acc]');
+assert.ok((await g.locator('.sheet').innerText()).includes('non registra nessun bonifico'), 'cambio conto spese senza bonifici');
+await g.click('.sheet button[data-action=close-sheet] >> nth=-1'); await g.waitForSelector('.sheet', { state: 'detached' });
 await g.click('button[data-action=budget-advance]'); await g.waitForSelector('.sheet'); await g.selectOption('.sheet select[name=weeks]', '0');
 await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' });
 await g.evaluate(() => { location.hash = '#/overview'; }); await g.waitForTimeout(300);

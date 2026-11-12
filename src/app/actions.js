@@ -787,6 +787,17 @@ export function createActions(api) {
       });
     },
     'planned-funding-now': () => runPlannedNow(),
+    'budget-account': () => {
+      const b = st().settings.budget;
+      const opts = accOpts().filter(([id]) => id !== b.accountId && !(b.advanceWeeks > 0 && id === b.sourceAccountId));
+      if (!opts.length) { api.toast('Nessun altro conto disponibile', true); return; }
+      api.openSheet({
+        title: 'Conto spese del budget', submit: 'Cambia',
+        body: html`<div class="note">È il conto da cui spendi: qui sta la <b>settimana corrente</b>. Cambia solo il riferimento: <b>non registra nessun bonifico</b>. Le riserve già presenti su altri conti restano dove sono e, se servono qui, compare il "bonifico da fare".</div>
+          ${select('acc', 'Nuovo conto spese', opts, opts[0][0])}`,
+        onSubmit: async (v) => { await api.commit((s, c) => C.setBudgetAccount(s, c, { accountId: v.acc })); api.toast('Conto spese cambiato'); },
+      });
+    },
     'budget-advance': () => {
       const b = st().settings.budget;
       const others = accOpts().filter(([id]) => id !== b.accountId);
