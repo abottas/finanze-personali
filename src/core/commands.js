@@ -248,7 +248,27 @@ export function voidTransfer(state, ctx, id, reason) {
     t.status = 'void';
     t.voidReason = needReason(reason);
     log('void', 'transfer', id, before, copy(t), t.voidReason);
+    // Un bonifico fatto per un fondo ha spostato anche la riserva: annullandolo, la riserva torna sul conto di origine
+    // (dove sono di nuovo i soldi). Senza questo il vincolo resterebbe sul conto di destinazione, che non ha più il denaro.
+    if (t.purpose === 'fund' && t.fundId) {
+      const f = s.funds.find((x) => x.id === t.fundId);
+      if (f) {
+        const back = Math.min(t.cents, Math.max(0, reserveAt(s, f.id, t.toAccountId)));
+        if (back > 0) {
+          const moveId = ctx.newId();
+          const o = pushAllocation(s, ctx, f.id, -back, 'move', 'Bonifico annullato', moveId, t.toAccountId);
+          const i = pushAllocation(s, ctx, f.id, back, 'move', 'Bonifico annullato', moveId, t.fromAccountId);
+          log('move', 'allocation', moveId, o, i, `Bonifico annullato: la riserva di "${f.name}" torna sul conto di origine`);
+        }
+      }
+    }
   });
+}
+/** Un bonifico non può togliere a un conto più di quanto ha: quasi sempre indica un errore (es. un bonifico mai fatto o già annullato). */
+function assertCovered(s, from, cents) {
+  if (from.balanceUnknown) return;
+  const bal = snapshot(s).balances[from.id];
+  req(bal >= cents, 'saldo_insufficiente', `Su ${from.name} risultano solo ${formatEuro(bal)}: il bonifico di ${formatEuro(cents)} non può essere registrato. Controlla il saldo reale del conto o annulla l'operazione precedente.`);
 }
 
 // ───────────────────── Fondi virtuali e allocazioni ─────────────────────
@@ -387,6 +407,7 @@ export function confirmFundTransfer(state, ctx, { fundId, fromAccountId, toAccou
     req(cents > 0, 'importo', 'L\'importo deve essere positivo');
     req(isDate(date) && date <= ctx.today, 'data_non_valida', 'Data non valida o futura');
     req(date >= from.openingDate && date >= to.openingDate, 'data_prima_apertura', 'La data precede il saldo iniziale di un conto');
+    assertCovered(s, from, cents);
     const reserved = reserveAt(s, f.id, from.id);
     req(cents <= reserved, 'riserva_insufficiente', `Su ${from.name} il fondo "${f.name}" ha riservato solo ${formatEuro(reserved)}`);
     const tr = { id: ctx.newId(), fromAccountId: from.id, toAccountId: to.id, cents, date, note: `Bonifico per "${f.name}"`, purpose: 'fund', fundId: f.id, plannedId: null, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
@@ -428,6 +449,7 @@ export function relocateFund(state, ctx, id, newAccountId, { onlyFrom = null } =
       if (onlyFrom && !onlyFrom.includes(acc)) continue;
       const from = find(s.accounts, acc, 'Conto di origine');
       req(ctx.today >= to.openingDate && ctx.today >= from.openingDate, 'data_prima_apertura', 'Un conto non era ancora aperto');
+      assertCovered(s, from, c);
       const tr = { id: ctx.newId(), fromAccountId: acc, toAccountId: to.id, cents: c, date: ctx.today, note: `Spostamento fondo "${f.name}"`, purpose: 'fund', fundId: f.id, plannedId: null, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
       s.transfers.push(tr);
       log('create', 'transfer', tr.id, null, tr, 'Bonifico confermato dall\'utente collegato allo spostamento del fondo');
