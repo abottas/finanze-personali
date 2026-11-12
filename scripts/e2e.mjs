@@ -206,6 +206,16 @@ await q.click('.sheet label:has-text("Voglio il netto")'); await q.fill('.sheet 
 const g = await q.locator('[data-fee=gross]').innerText(); assert.ok(/1\.3\d\d,\d\d/.test(g), 'compenso per netto 1.000: ' + g);
 await qshot('24b-calcolatrice'); await q.click('.sheet button[data-action=close-sheet] >> nth=-1'); await q.waitForSelector('.sheet', { state: 'detached' });
 
+step('esportazione JSON per ChatGPT');
+await q.evaluate(() => { location.hash = '#/settings/backup'; }); await q.waitForSelector('button[data-action=export-ai]');
+await q.click('button[data-action=export-ai]'); await q.waitForSelector('.sheet'); await q.check('.sheet input[name=ack]');
+const [dlAi] = await Promise.all([q.waitForEvent('download'), q.click('.sheet button[type=submit]')]);
+const aiTxt = await (await import('node:fs/promises')).readFile(await dlAi.path(), 'utf8'); const aiJson = JSON.parse(aiTxt);
+assert.equal(aiJson.schema.name, 'finanze-personali/situazione-per-analisi'); assert.ok(aiJson.currentSituation.accounts.length >= 1); assert.ok(aiJson.projections.dailyPoints.length > 30);
+assert.ok(!/password|iban/i.test(aiTxt.replace(/IBAN, numeri di conto, password e chiavi di cifratura/g, '')), 'nessun dato sensibile nel JSON');
+await q.waitForSelector('.sheet', { state: 'detached' }).catch(() => {});
+await q.evaluate(() => { location.hash = '#/overview'; }); await q.waitForTimeout(200);
+
 step('situazione a una data');
 await q.evaluate(() => { location.hash = '#/plan'; }); await q.waitForSelector('button[data-action=open-situation]');
 await q.click('button[data-action=open-situation][data-v=dec]'); await q.waitForSelector('text=Uscite previste'); await q.waitForTimeout(300);

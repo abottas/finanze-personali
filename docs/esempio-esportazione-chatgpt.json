@@ -1,0 +1,3123 @@
+{
+ "schema": {
+  "name": "finanze-personali/situazione-per-analisi",
+  "version": "1.0.0",
+  "purpose": "Valutare la sostenibilità di spese aggiuntive a partire da uno stato fedele dell'app, senza ricalcoli.",
+  "conventions": {
+   "amounts": "interi in centesimi di euro (100 = 1,00 €); i campi *Cents",
+   "signs": "movements.transactions.amountCents: entrate positive, uscite negative; trasferimenti e allocazioni positivi nella direzione indicata",
+   "dates": "ISO 8601: giorni YYYY-MM-DD, istanti UTC",
+   "basisPointsFields": "coefficientBp/inpsBp/taxBp: punti base (2607 = 26,07%)",
+   "nulls": "null = informazione assente nel modello o non applicabile; mai un valore inventato"
+  },
+  "sections": [
+   "currentSituation",
+   "receivables",
+   "recurringIncome",
+   "expenses",
+   "fundsAndGoals",
+   "movements",
+   "history",
+   "tax",
+   "projections",
+   "dataQuality",
+   "reference"
+  ]
+ },
+ "export": {
+  "exportedAt": "2026-11-12T10:30:00.000Z",
+  "asOfDate": "2026-11-12",
+  "appVersion": "0.14.0",
+  "appStateSchemaVersion": 3,
+  "containsDemoData": false,
+  "currency": "EUR"
+ },
+ "currentSituation": {
+  "accounts": [
+   {
+    "id": "id0001",
+    "name": "Banca Accrediti",
+    "bank": "isybank",
+    "type": "checking",
+    "role": "Accredito dei compensi",
+    "archived": false,
+    "countsAsLiquidity": true,
+    "balanceCents": 334500,
+    "balanceStatus": "derived_from_recorded_movements",
+    "openingBalanceCents": 214500,
+    "openingDate": "2026-11-01",
+    "lastBalanceAdjustmentDate": null,
+    "lastBankReconciliation": null,
+    "reservedCents": 47500,
+    "freeCents": 287000,
+    "reservations": [
+     {
+      "fundId": "id0013",
+      "fundName": "Budget settimanale",
+      "fundKind": "budget",
+      "cents": 47500
+     }
+    ]
+   },
+   {
+    "id": "id0002",
+    "name": "Banca Spese",
+    "bank": "revolut",
+    "type": "checking",
+    "role": "Spese quotidiane",
+    "archived": false,
+    "countsAsLiquidity": true,
+    "balanceCents": 52500,
+    "balanceStatus": "derived_from_recorded_movements",
+    "openingBalanceCents": 61000,
+    "openingDate": "2026-11-01",
+    "lastBalanceAdjustmentDate": null,
+    "lastBankReconciliation": null,
+    "reservedCents": 52500,
+    "freeCents": 0,
+    "reservations": [
+     {
+      "fundId": "id0013",
+      "fundName": "Budget settimanale",
+      "fundKind": "budget",
+      "cents": 52500
+     }
+    ]
+   },
+   {
+    "id": "id0003",
+    "name": "Broker Tasse",
+    "bank": "trade_republic",
+    "type": "savings",
+    "role": "Riserva fiscale (liquidità)",
+    "archived": false,
+    "countsAsLiquidity": true,
+    "balanceCents": 98000,
+    "balanceStatus": "derived_from_recorded_movements",
+    "openingBalanceCents": 98000,
+    "openingDate": "2026-11-01",
+    "lastBalanceAdjustmentDate": null,
+    "lastBankReconciliation": null,
+    "reservedCents": 0,
+    "freeCents": 98000,
+    "reservations": []
+   },
+   {
+    "id": "id0004",
+    "name": "Broker PAC",
+    "bank": "trade_republic",
+    "type": "investment",
+    "role": "PAC (investito)",
+    "archived": false,
+    "countsAsLiquidity": false,
+    "balanceCents": 40000,
+    "balanceStatus": "derived_from_recorded_movements",
+    "openingBalanceCents": 40000,
+    "openingDate": "2026-11-01",
+    "lastBalanceAdjustmentDate": null,
+    "lastBankReconciliation": null,
+    "reservedCents": null,
+    "freeCents": null,
+    "reservations": []
+   },
+   {
+    "id": "id0005",
+    "name": "Banca Risparmio",
+    "bank": "bbva",
+    "type": "savings",
+    "role": "Risparmio e obiettivi",
+    "archived": false,
+    "countsAsLiquidity": true,
+    "balanceCents": 150000,
+    "balanceStatus": "derived_from_recorded_movements",
+    "openingBalanceCents": 150000,
+    "openingDate": "2026-11-01",
+    "lastBalanceAdjustmentDate": null,
+    "lastBankReconciliation": null,
+    "reservedCents": 10000,
+    "freeCents": 140000,
+    "reservations": [
+     {
+      "fundId": "id0081",
+      "fundName": "Per: PAC",
+      "fundKind": "planned",
+      "cents": 10000
+     }
+    ]
+   },
+   {
+    "id": "id0006",
+    "name": "Banca Extra",
+    "bank": "buddybank",
+    "type": "checking",
+    "role": "Liquidità aggiuntiva",
+    "archived": false,
+    "countsAsLiquidity": true,
+    "balanceCents": 5000,
+    "balanceStatus": "derived_from_recorded_movements",
+    "openingBalanceCents": 5000,
+    "openingDate": "2026-11-01",
+    "lastBalanceAdjustmentDate": null,
+    "lastBankReconciliation": null,
+    "reservedCents": 0,
+    "freeCents": 5000,
+    "reservations": []
+   }
+  ],
+  "totals": {
+   "liquidCents": 640000,
+   "investedCents": 40000,
+   "totalWealthCents": 680000,
+   "reservedCents": 110000,
+   "freeCents": 530000,
+   "reservedByFundKindCents": {
+    "goal": 0,
+    "tax": 0,
+    "planned": 10000,
+    "reserve": 0,
+    "budget": 100000
+   },
+   "partial": false,
+   "accountsWithUnknownBalance": []
+  },
+  "pendingBankTransfers": [
+   {
+    "fundId": "id0013",
+    "fromAccountId": "id0001",
+    "toAccountId": "id0002",
+    "cents": 7500,
+    "meaning": "riserva virtuale su un conto diverso da quello di riferimento del fondo: bonifico reale non ancora confermato"
+   },
+   {
+    "fundId": "id0081",
+    "fromAccountId": "id0005",
+    "toAccountId": "id0003",
+    "cents": 10000,
+    "meaning": "riserva virtuale su un conto diverso da quello di riferimento del fondo: bonifico reale non ancora confermato"
+   }
+  ],
+  "note": "freeCents = saldo − somme riservate ai fondi (vincoli contabili virtuali, non movimenti bancari). I conti di investimento non sono liquidità."
+ },
+ "receivables": {
+  "items": [
+   {
+    "id": "id0066",
+    "client": "Cliente Gamma",
+    "description": "Saldo progetto",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": null,
+    "expectedDate": "2026-11-02",
+    "receivedDate": null,
+    "grossExpectedCents": 45000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 45000,
+    "taxReserve": {
+     "configuredCents": null,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": null,
+     "configuredBy": "non impostata: vale la stima del profilo fiscale"
+    },
+    "projection": {
+     "available": false,
+     "reason": "incasso scaduto: non entra nelle previsioni"
+    },
+    "overdue": true,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": null,
+    "cancelReason": null
+   },
+   {
+    "id": "id0057",
+    "client": "Cliente Alfa",
+    "description": "Fattura ottobre",
+    "status": "received",
+    "accountId": "id0001",
+    "invoiceDate": null,
+    "expectedDate": "2026-11-05",
+    "receivedDate": "2026-11-06",
+    "grossExpectedCents": 120000,
+    "grossReceivedCents": 120000,
+    "grossRemainingCents": null,
+    "taxReserve": {
+     "configuredCents": 30000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 30000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": null,
+    "overdue": false,
+    "linkedTransactionId": "id0059",
+    "recurringTemplateKey": null,
+    "cancelReason": null
+   },
+   {
+    "id": "id0062",
+    "client": "Cliente Beta",
+    "description": "Fattura novembre",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": null,
+    "expectedDate": "2026-11-27",
+    "receivedDate": null,
+    "grossExpectedCents": 140000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 140000,
+    "taxReserve": {
+     "configuredCents": 35000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 35000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": {
+     "date": "2026-11-27",
+     "grossCents": 140000,
+     "freeAfterReserveCents": 105000,
+     "impliedReserveCents": 35000,
+     "nature": "estimated",
+     "counted": "solo nello scenario \"con incassi attesi\""
+    },
+    "overdue": false,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": null,
+    "cancelReason": null
+   },
+   {
+    "id": "id0016",
+    "client": "Cliente A",
+    "description": "Fattura del 27/11",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": "2026-11-27",
+    "expectedDate": "2026-12-09",
+    "receivedDate": null,
+    "grossExpectedCents": 120000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 120000,
+    "taxReserve": {
+     "configuredCents": 30000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 30000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": {
+     "date": "2026-12-09",
+     "grossCents": 120000,
+     "freeAfterReserveCents": 90000,
+     "impliedReserveCents": 30000,
+     "nature": "estimated",
+     "counted": "solo nello scenario \"con incassi attesi\""
+    },
+    "overdue": false,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": "id0014:2026-11",
+    "cancelReason": null
+   },
+   {
+    "id": "id0019",
+    "client": "Cliente B",
+    "description": "Fattura del 27/11",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": "2026-11-27",
+    "expectedDate": "2026-12-09",
+    "receivedDate": null,
+    "grossExpectedCents": 60000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 60000,
+    "taxReserve": {
+     "configuredCents": 15000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 15000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": {
+     "date": "2026-12-09",
+     "grossCents": 60000,
+     "freeAfterReserveCents": 45000,
+     "impliedReserveCents": 15000,
+     "nature": "estimated",
+     "counted": "solo nello scenario \"con incassi attesi\""
+    },
+    "overdue": false,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": "id0015:2026-11",
+    "cancelReason": null
+   },
+   {
+    "id": "id0064",
+    "client": "Cliente Beta",
+    "description": "Fattura dicembre",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": null,
+    "expectedDate": "2026-12-27",
+    "receivedDate": null,
+    "grossExpectedCents": 140000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 140000,
+    "taxReserve": {
+     "configuredCents": 35000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 35000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": {
+     "date": "2026-12-27",
+     "grossCents": 140000,
+     "freeAfterReserveCents": 105000,
+     "impliedReserveCents": 35000,
+     "nature": "estimated",
+     "counted": "solo nello scenario \"con incassi attesi\""
+    },
+    "overdue": false,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": null,
+    "cancelReason": null
+   },
+   {
+    "id": "id0017",
+    "client": "Cliente A",
+    "description": "Fattura del 27/12",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": "2026-12-27",
+    "expectedDate": "2027-01-08",
+    "receivedDate": null,
+    "grossExpectedCents": 120000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 120000,
+    "taxReserve": {
+     "configuredCents": 30000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 30000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": {
+     "date": "2027-01-08",
+     "grossCents": 120000,
+     "freeAfterReserveCents": 90000,
+     "impliedReserveCents": 30000,
+     "nature": "estimated",
+     "counted": "solo nello scenario \"con incassi attesi\""
+    },
+    "overdue": false,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": "id0014:2026-12",
+    "cancelReason": null
+   },
+   {
+    "id": "id0020",
+    "client": "Cliente B",
+    "description": "Fattura del 27/12",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": "2026-12-27",
+    "expectedDate": "2027-01-08",
+    "receivedDate": null,
+    "grossExpectedCents": 60000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 60000,
+    "taxReserve": {
+     "configuredCents": 15000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 15000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": {
+     "date": "2027-01-08",
+     "grossCents": 60000,
+     "freeAfterReserveCents": 45000,
+     "impliedReserveCents": 15000,
+     "nature": "estimated",
+     "counted": "solo nello scenario \"con incassi attesi\""
+    },
+    "overdue": false,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": "id0015:2026-12",
+    "cancelReason": null
+   },
+   {
+    "id": "id0018",
+    "client": "Cliente A",
+    "description": "Fattura del 27/01",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": "2027-01-27",
+    "expectedDate": "2027-02-08",
+    "receivedDate": null,
+    "grossExpectedCents": 120000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 120000,
+    "taxReserve": {
+     "configuredCents": 30000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 30000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": {
+     "date": "2027-02-08",
+     "grossCents": 120000,
+     "freeAfterReserveCents": 90000,
+     "impliedReserveCents": 30000,
+     "nature": "estimated",
+     "counted": "solo nello scenario \"con incassi attesi\""
+    },
+    "overdue": false,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": "id0014:2027-01",
+    "cancelReason": null
+   },
+   {
+    "id": "id0021",
+    "client": "Cliente B",
+    "description": "Fattura del 27/01",
+    "status": "expected",
+    "accountId": "id0001",
+    "invoiceDate": "2027-01-27",
+    "expectedDate": "2027-02-08",
+    "receivedDate": null,
+    "grossExpectedCents": 60000,
+    "grossReceivedCents": null,
+    "grossRemainingCents": 60000,
+    "taxReserve": {
+     "configuredCents": 15000,
+     "allocatedCents": 0,
+     "remainingToAllocateCents": 15000,
+     "configuredBy": "regola per questo incasso"
+    },
+    "projection": {
+     "date": "2027-02-08",
+     "grossCents": 60000,
+     "freeAfterReserveCents": 45000,
+     "impliedReserveCents": 15000,
+     "nature": "estimated",
+     "counted": "solo nello scenario \"con incassi attesi\""
+    },
+    "overdue": false,
+    "linkedTransactionId": null,
+    "recurringTemplateKey": "id0015:2027-01",
+    "cancelReason": null
+   }
+  ]
+ },
+ "recurringIncome": {
+  "invoices": [
+   {
+    "id": "id0014",
+    "client": "Cliente A",
+    "grossCents": 120000,
+    "invoiceDay": 27,
+    "collectDays": 12,
+    "accountId": "id0001",
+    "taxReserveCents": 30000,
+    "active": true,
+    "toReview": false,
+    "note": null
+   },
+   {
+    "id": "id0015",
+    "client": "Cliente B",
+    "grossCents": 60000,
+    "invoiceDay": 27,
+    "collectDays": 12,
+    "accountId": "id0001",
+    "taxReserveCents": 15000,
+    "active": true,
+    "toReview": true,
+    "note": "Rapporto da verificare"
+   }
+  ]
+ },
+ "expenses": {
+  "incurredExpenses": "Spese già sostenute: vedi movements.transactions con kind = \"expense\" (e \"investment\" per i versamenti), status = \"posted\". Una sola lista, nessuna copia qui.",
+  "plannedItems": [
+   {
+    "id": "id0023",
+    "name": "PAC",
+    "kind": "investment",
+    "status": "planned",
+    "isRecurring": true,
+    "recurrence": "monthly",
+    "amountCents": 10000,
+    "nextDueDate": "2026-11-02",
+    "anchorDay": 2,
+    "leadDays": 0,
+    "priority": 2,
+    "categoryId": "cat_invest",
+    "paymentAccountId": "id0003",
+    "fundingAccountId": null,
+    "toInvestmentAccountId": "id0004",
+    "autoDebit": false,
+    "autoExecute": true,
+    "confirmationNeeded": null,
+    "origin": "profile",
+    "coverage": {
+     "fundId": "id0081",
+     "fundAvailableCents": 10000,
+     "reservedOnPaymentAccountCents": 0,
+     "fundedCents": 10000,
+     "stillToFundCents": 0,
+     "state": "reserved_bank_transfer_to_do"
+    }
+   },
+   {
+    "id": "id0022",
+    "name": "Corso",
+    "kind": "subscription",
+    "status": "planned",
+    "isRecurring": true,
+    "recurrence": "monthly",
+    "amountCents": 12000,
+    "nextDueDate": "2026-12-01",
+    "anchorDay": 1,
+    "leadDays": 0,
+    "priority": 2,
+    "categoryId": "cat_fun",
+    "paymentAccountId": "id0002",
+    "fundingAccountId": null,
+    "toInvestmentAccountId": null,
+    "autoDebit": false,
+    "autoExecute": false,
+    "confirmationNeeded": "date",
+    "origin": "profile",
+    "coverage": {
+     "fundId": null,
+     "fundAvailableCents": null,
+     "reservedOnPaymentAccountCents": null,
+     "fundedCents": 0,
+     "stillToFundCents": 12000,
+     "state": "no_fund"
+    }
+   },
+   {
+    "id": "id0024",
+    "name": "Assicurazione",
+    "kind": "subscription",
+    "status": "planned",
+    "isRecurring": true,
+    "recurrence": "monthly",
+    "amountCents": 8000,
+    "nextDueDate": "2026-12-01",
+    "anchorDay": 1,
+    "leadDays": 0,
+    "priority": 2,
+    "categoryId": "cat_insurance",
+    "paymentAccountId": "id0002",
+    "fundingAccountId": null,
+    "toInvestmentAccountId": null,
+    "autoDebit": false,
+    "autoExecute": false,
+    "confirmationNeeded": "active",
+    "origin": "profile",
+    "coverage": {
+     "fundId": null,
+     "fundAvailableCents": null,
+     "reservedOnPaymentAccountCents": null,
+     "fundedCents": 0,
+     "stillToFundCents": 8000,
+     "state": "no_fund"
+    }
+   }
+  ],
+  "budget": {
+   "weeklyCents": 20000,
+   "startDate": "2026-11-01",
+   "carryOverSurplus": true,
+   "carryOverDeficit": true,
+   "fundedAsFund": true,
+   "fundId": "id0013",
+   "spendingAccountId": "id0002",
+   "advanceWeeks": 2,
+   "advanceSourceAccountId": "id0001",
+   "lastFundedWeek": "2026-11-09",
+   "fundReservedByAccount": [
+    {
+     "accountId": "id0002",
+     "cents": 52500
+    },
+    {
+     "accountId": "id0001",
+     "cents": 47500
+    }
+   ],
+   "currentWeek": {
+    "started": true,
+    "weekStart": "2026-11-09",
+    "weekEnd": "2026-11-15",
+    "baseCents": 20000,
+    "carryCents": 40000,
+    "spentCents": 6000,
+    "remainingCents": 54000
+   },
+   "weeks": [
+    {
+     "weekStart": "2026-10-26",
+     "baseCents": 20000,
+     "carryCents": 0,
+     "spentCents": 0,
+     "remainingCents": 20000
+    },
+    {
+     "weekStart": "2026-11-02",
+     "baseCents": 20000,
+     "carryCents": 20000,
+     "spentCents": 0,
+     "remainingCents": 40000
+    },
+    {
+     "weekStart": "2026-11-09",
+     "baseCents": 20000,
+     "carryCents": 40000,
+     "spentCents": 6000,
+     "remainingCents": 54000
+    }
+   ]
+  },
+  "plannedFunding": {
+   "enabled": true,
+   "horizonDays": 45,
+   "sourceAccountId": "id0005",
+   "lastRunDate": "2026-11-12"
+  }
+ },
+ "fundsAndGoals": {
+  "funds": [
+   {
+    "id": "id0007",
+    "name": "Riserva fiscale",
+    "kind": "tax",
+    "archived": false,
+    "provisional": false,
+    "referenceAccountId": "id0003",
+    "parentFundId": null,
+    "childFundIds": [],
+    "linkedPlannedId": null,
+    "refillFundId": "id0008",
+    "goal": null,
+    "targetCents": 0,
+    "allocatedAvailableCents": 0,
+    "assignedTotalCents": 0,
+    "spentFromFundCents": 0,
+    "stillNeededCents": 0,
+    "locations": [],
+    "pendingBankTransferCents": 0
+   },
+   {
+    "id": "id0008",
+    "name": "Reintegro riserva fiscale",
+    "kind": "goal",
+    "archived": false,
+    "provisional": true,
+    "referenceAccountId": "id0003",
+    "parentFundId": null,
+    "childFundIds": [],
+    "linkedPlannedId": null,
+    "refillFundId": null,
+    "goal": {
+     "targetCents": 60000,
+     "minCents": null,
+     "priority": 1,
+     "deadline": null
+    },
+    "targetCents": 60000,
+    "allocatedAvailableCents": 0,
+    "assignedTotalCents": 0,
+    "spentFromFundCents": 0,
+    "stillNeededCents": 60000,
+    "locations": [],
+    "pendingBankTransferCents": 0
+   },
+   {
+    "id": "id0009",
+    "name": "Viaggio",
+    "kind": "goal",
+    "archived": false,
+    "provisional": false,
+    "referenceAccountId": "id0005",
+    "parentFundId": null,
+    "childFundIds": [
+     "id0012"
+    ],
+    "linkedPlannedId": null,
+    "refillFundId": null,
+    "goal": {
+     "targetCents": 100000,
+     "minCents": null,
+     "priority": 2,
+     "deadline": "2026-12-30"
+    },
+    "targetCents": 100000,
+    "allocatedAvailableCents": 0,
+    "assignedTotalCents": 0,
+    "spentFromFundCents": 0,
+    "stillNeededCents": 85000,
+    "locations": [],
+    "pendingBankTransferCents": 0
+   },
+   {
+    "id": "id0010",
+    "name": "Cuscinetto",
+    "kind": "goal",
+    "archived": false,
+    "provisional": false,
+    "referenceAccountId": "id0005",
+    "parentFundId": null,
+    "childFundIds": [],
+    "linkedPlannedId": null,
+    "refillFundId": null,
+    "goal": {
+     "targetCents": 40000,
+     "minCents": null,
+     "priority": 3,
+     "deadline": null
+    },
+    "targetCents": 40000,
+    "allocatedAvailableCents": 0,
+    "assignedTotalCents": 0,
+    "spentFromFundCents": 0,
+    "stillNeededCents": 40000,
+    "locations": [],
+    "pendingBankTransferCents": 0
+   },
+   {
+    "id": "id0011",
+    "name": "Obiettivo A",
+    "kind": "goal",
+    "archived": false,
+    "provisional": false,
+    "referenceAccountId": "id0005",
+    "parentFundId": null,
+    "childFundIds": [],
+    "linkedPlannedId": null,
+    "refillFundId": null,
+    "goal": {
+     "targetCents": null,
+     "minCents": null,
+     "priority": 3,
+     "deadline": null
+    },
+    "targetCents": 0,
+    "allocatedAvailableCents": 0,
+    "assignedTotalCents": 0,
+    "spentFromFundCents": 0,
+    "stillNeededCents": 0,
+    "locations": [],
+    "pendingBankTransferCents": 0
+   },
+   {
+    "id": "id0012",
+    "name": "Abbigliamento viaggio",
+    "kind": "goal",
+    "archived": false,
+    "provisional": false,
+    "referenceAccountId": "id0005",
+    "parentFundId": "id0009",
+    "childFundIds": [],
+    "linkedPlannedId": null,
+    "refillFundId": null,
+    "goal": {
+     "targetCents": 15000,
+     "minCents": 10000,
+     "priority": 2,
+     "deadline": null
+    },
+    "targetCents": 15000,
+    "allocatedAvailableCents": 0,
+    "assignedTotalCents": 0,
+    "spentFromFundCents": 0,
+    "stillNeededCents": 15000,
+    "locations": [],
+    "pendingBankTransferCents": 0
+   },
+   {
+    "id": "id0013",
+    "name": "Budget settimanale",
+    "kind": "budget",
+    "archived": false,
+    "provisional": false,
+    "referenceAccountId": "id0002",
+    "parentFundId": null,
+    "childFundIds": [],
+    "linkedPlannedId": null,
+    "refillFundId": null,
+    "goal": null,
+    "targetCents": 0,
+    "allocatedAvailableCents": 100000,
+    "assignedTotalCents": 100000,
+    "spentFromFundCents": 0,
+    "stillNeededCents": 0,
+    "locations": [
+     {
+      "accountId": "id0002",
+      "cents": 52500,
+      "isReferenceAccount": true
+     },
+     {
+      "accountId": "id0001",
+      "cents": 47500,
+      "isReferenceAccount": false
+     }
+    ],
+    "pendingBankTransferCents": 7500
+   },
+   {
+    "id": "id0081",
+    "name": "Per: PAC",
+    "kind": "planned",
+    "archived": false,
+    "provisional": false,
+    "referenceAccountId": "id0003",
+    "parentFundId": null,
+    "childFundIds": [],
+    "linkedPlannedId": "id0023",
+    "refillFundId": null,
+    "goal": null,
+    "targetCents": 10000,
+    "allocatedAvailableCents": 10000,
+    "assignedTotalCents": 10000,
+    "spentFromFundCents": 0,
+    "stillNeededCents": 0,
+    "locations": [
+     {
+      "accountId": "id0005",
+      "cents": 10000,
+      "isReferenceAccount": false
+     }
+    ],
+    "pendingBankTransferCents": 10000
+   }
+  ],
+  "refills": [
+   {
+    "whenPayingFromFundId": "id0007",
+    "increasesGoalOfFundId": "id0008",
+    "refillTargetCents": 60000,
+    "refillAllocatedCents": 0,
+    "refillStillNeededCents": 60000
+   }
+  ]
+ },
+ "movements": {
+  "note": "Registri effettivi: ogni movimento compare una sola volta. I trasferimenti non sono entrate né uscite; le allocazioni sono vincoli virtuali (non muovono denaro in banca).",
+  "transactions": [
+   {
+    "id": "id0059",
+    "date": "2026-11-06",
+    "accountId": "id0001",
+    "kind": "income",
+    "amountCents": 120000,
+    "categoryId": "cat_pro",
+    "categoryName": "Incassi professionali",
+    "fundId": null,
+    "plannedId": null,
+    "receivableId": "id0057",
+    "note": "Cliente Alfa — Fattura ottobre",
+    "status": "posted",
+    "voidReason": null,
+    "refillFundId": null,
+    "refillCents": null
+   },
+   {
+    "id": "id0068",
+    "date": "2026-11-09",
+    "accountId": "id0002",
+    "kind": "expense",
+    "amountCents": -4200,
+    "categoryId": "cat_food",
+    "categoryName": "Alimentari",
+    "fundId": null,
+    "plannedId": null,
+    "receivableId": null,
+    "note": "Spesa settimanale",
+    "status": "posted",
+    "voidReason": null,
+    "refillFundId": null,
+    "refillCents": null
+   },
+   {
+    "id": "id0070",
+    "date": "2026-11-10",
+    "accountId": "id0002",
+    "kind": "expense",
+    "amountCents": -2500,
+    "categoryId": "cat_subs",
+    "categoryName": "Abbonamenti",
+    "fundId": null,
+    "plannedId": null,
+    "receivableId": null,
+    "note": "Abbonamento software",
+    "status": "posted",
+    "voidReason": null,
+    "refillFundId": null,
+    "refillCents": null
+   },
+   {
+    "id": "id0072",
+    "date": "2026-11-11",
+    "accountId": "id0002",
+    "kind": "expense",
+    "amountCents": -1800,
+    "categoryId": "cat_eat",
+    "categoryName": "Ristoranti e bar",
+    "fundId": null,
+    "plannedId": null,
+    "receivableId": null,
+    "note": "Cena",
+    "status": "posted",
+    "voidReason": null,
+    "refillFundId": null,
+    "refillCents": null
+   }
+  ],
+  "transfers": [],
+  "allocations": [
+   {
+    "id": "id0075",
+    "date": "2026-11-12",
+    "fundId": "id0013",
+    "accountId": "id0002",
+    "amountCents": 52500,
+    "kind": "assign",
+    "moveId": null,
+    "receivableId": null,
+    "note": "Finanziamento del budget"
+   },
+   {
+    "id": "id0076",
+    "date": "2026-11-12",
+    "fundId": "id0013",
+    "accountId": "id0001",
+    "amountCents": 47500,
+    "kind": "assign",
+    "moveId": null,
+    "receivableId": null,
+    "note": "Finanziamento del budget"
+   },
+   {
+    "id": "id0082",
+    "date": "2026-11-12",
+    "fundId": "id0081",
+    "accountId": "id0005",
+    "amountCents": 10000,
+    "kind": "assign",
+    "moveId": null,
+    "receivableId": null,
+    "note": "Scadenza finanziata in anticipo"
+   }
+  ],
+  "bankReconciliations": []
+ },
+ "history": {
+  "monthly": [
+   {
+    "month": "2025-12",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-01",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-02",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-03",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-04",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-05",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-06",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-07",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-08",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-09",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-10",
+    "incomeCents": 0,
+    "professionalIncomeCents": 0,
+    "expenseCents": 0,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 0,
+    "netAfterExpensesAndReserveCents": 0
+   },
+   {
+    "month": "2026-11",
+    "incomeCents": 120000,
+    "professionalIncomeCents": 120000,
+    "expenseCents": 8500,
+    "taxReserveAllocatedCents": 0,
+    "investedCents": 0,
+    "theoreticalTaxEstimateCents": 27862,
+    "netAfterExpensesAndReserveCents": 111500
+   }
+  ],
+  "nature": "derived_from_effective_movements"
+ },
+ "tax": {
+  "profile": {
+   "enabled": true,
+   "coefficientBp": 7800,
+   "inpsBp": 2607,
+   "taxBp": 500,
+   "inpsDeduction": "accrued",
+   "taxFundId": "id0007",
+   "ratesVerifiedForYear": null,
+   "openingData": {
+    "year": 2026,
+    "untilDate": "2026-10-31",
+    "ricaviCents": 1200000,
+    "inpsPaidCents": 0,
+    "impostaPaidCents": 0
+   }
+  },
+  "year": 2026,
+  "ledger": {
+   "estimateTotalDueCents": 306476,
+   "estimateStillDueCents": 306476,
+   "collectedRevenueCents": 1320000,
+   "taxableBaseCents": 1029600,
+   "inpsDueCents": 268417,
+   "substituteTaxDueCents": 38059,
+   "scenarioWithExpectedReceipts": {
+    "expectedRest": 505000,
+    "ricavi": 1825000,
+    "totalDue": 423726,
+    "stillDue": 423726
+   },
+   "earmarkedAllocatedThisYearCents": 0,
+   "earmarkedNowCents": 0,
+   "transferredThisYearCents": 0,
+   "paidInpsCents": 0,
+   "paidSubstituteTaxCents": 0
+  },
+  "nature": "estimated",
+  "note": "Stima per accantonare, non un calcolo fiscale ufficiale."
+ },
+ "projections": {
+  "nature": "projection",
+  "horizonDays": 90,
+  "from": "2026-11-12",
+  "to": "2027-02-10",
+  "meaning": {
+   "prudent": "solo il denaro già presente: nessun incasso non ricevuto",
+   "withExpected": "include gli incassi attesi (non garantiti)",
+   "free": "liquidità non vincolata ai fondi",
+   "total": "liquidità totale (investimenti esclusi)"
+  },
+  "start": {
+   "liquidCents": 640000,
+   "freeCents": 530000,
+   "reservedCents": 110000
+  },
+  "minimumFree": {
+   "cents": 250000,
+   "date": "2027-02-08"
+  },
+  "insufficientLiquidity": [
+   {
+    "kind": "receivable_overdue",
+    "severity": "medium",
+    "date": "2026-11-02",
+    "cents": 45000,
+    "coveredByExpectedReceipts": null,
+    "message": "Incasso in ritardo: Cliente Gamma (10 gg)",
+    "refId": "id0066"
+   }
+  ],
+  "events": [
+   {
+    "date": "2026-11-12",
+    "kind": "budget",
+    "label": "Budget settimana (residuo)",
+    "amountCents": -54000,
+    "effectOnFreeCents": 0,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-11-12",
+    "kind": "planned",
+    "label": "PAC",
+    "amountCents": -10000,
+    "effectOnFreeCents": 0,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": 10000,
+    "reference": {
+     "type": "planned",
+     "plannedId": "id0023",
+     "fundId": "id0081",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-11-16",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": 0,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-11-23",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": 0,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-11-27",
+    "kind": "receivable",
+    "label": "Cliente Beta",
+    "amountCents": 140000,
+    "effectOnFreeCents": 105000,
+    "countedInPrudent": false,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "receivable",
+     "candidateIds": [
+      "id0062"
+     ],
+     "match": "exact"
+    }
+   },
+   {
+    "date": "2026-11-30",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -14000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-12-01",
+    "kind": "planned",
+    "label": "Corso",
+    "amountCents": -12000,
+    "effectOnFreeCents": -12000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": 0,
+    "reference": {
+     "type": "planned",
+     "plannedId": "id0022",
+     "fundId": null,
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-12-02",
+    "kind": "planned",
+    "label": "PAC",
+    "amountCents": -10000,
+    "effectOnFreeCents": -10000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": 0,
+    "reference": {
+     "type": "planned",
+     "plannedId": "id0023",
+     "fundId": "id0081",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-12-07",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-12-09",
+    "kind": "receivable",
+    "label": "Cliente A",
+    "amountCents": 120000,
+    "effectOnFreeCents": 90000,
+    "countedInPrudent": false,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "receivable",
+     "candidateIds": [
+      "id0016"
+     ],
+     "match": "exact"
+    }
+   },
+   {
+    "date": "2026-12-09",
+    "kind": "receivable",
+    "label": "Cliente B",
+    "amountCents": 60000,
+    "effectOnFreeCents": 45000,
+    "countedInPrudent": false,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "receivable",
+     "candidateIds": [
+      "id0019"
+     ],
+     "match": "exact"
+    }
+   },
+   {
+    "date": "2026-12-14",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-12-21",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2026-12-27",
+    "kind": "receivable",
+    "label": "Cliente Beta",
+    "amountCents": 140000,
+    "effectOnFreeCents": 105000,
+    "countedInPrudent": false,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "receivable",
+     "candidateIds": [
+      "id0064"
+     ],
+     "match": "exact"
+    }
+   },
+   {
+    "date": "2026-12-28",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-01-01",
+    "kind": "planned",
+    "label": "Corso",
+    "amountCents": -12000,
+    "effectOnFreeCents": -12000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": 0,
+    "reference": {
+     "type": "planned",
+     "plannedId": "id0022",
+     "fundId": null,
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-01-02",
+    "kind": "planned",
+    "label": "PAC",
+    "amountCents": -10000,
+    "effectOnFreeCents": -10000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": 0,
+    "reference": {
+     "type": "planned",
+     "plannedId": "id0023",
+     "fundId": "id0081",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-01-04",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-01-08",
+    "kind": "receivable",
+    "label": "Cliente A",
+    "amountCents": 120000,
+    "effectOnFreeCents": 90000,
+    "countedInPrudent": false,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "receivable",
+     "candidateIds": [
+      "id0017"
+     ],
+     "match": "exact"
+    }
+   },
+   {
+    "date": "2027-01-08",
+    "kind": "receivable",
+    "label": "Cliente B",
+    "amountCents": 60000,
+    "effectOnFreeCents": 45000,
+    "countedInPrudent": false,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "receivable",
+     "candidateIds": [
+      "id0020"
+     ],
+     "match": "exact"
+    }
+   },
+   {
+    "date": "2027-01-11",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-01-18",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-01-25",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-02-01",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-02-01",
+    "kind": "planned",
+    "label": "Corso",
+    "amountCents": -12000,
+    "effectOnFreeCents": -12000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": 0,
+    "reference": {
+     "type": "planned",
+     "plannedId": "id0022",
+     "fundId": null,
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-02-02",
+    "kind": "planned",
+    "label": "PAC",
+    "amountCents": -10000,
+    "effectOnFreeCents": -10000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": 0,
+    "reference": {
+     "type": "planned",
+     "plannedId": "id0023",
+     "fundId": "id0081",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-02-08",
+    "kind": "budget",
+    "label": "Budget settimanale",
+    "amountCents": -20000,
+    "effectOnFreeCents": -20000,
+    "countedInPrudent": true,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "budget",
+     "fundId": "id0013",
+     "match": "direct"
+    }
+   },
+   {
+    "date": "2027-02-08",
+    "kind": "receivable",
+    "label": "Cliente A",
+    "amountCents": 120000,
+    "effectOnFreeCents": 90000,
+    "countedInPrudent": false,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "receivable",
+     "candidateIds": [
+      "id0018"
+     ],
+     "match": "exact"
+    }
+   },
+   {
+    "date": "2027-02-08",
+    "kind": "receivable",
+    "label": "Cliente B",
+    "amountCents": 60000,
+    "effectOnFreeCents": 45000,
+    "countedInPrudent": false,
+    "projectedFromRecurringInvoice": false,
+    "coveredByFundCents": null,
+    "reference": {
+     "type": "receivable",
+     "candidateIds": [
+      "id0021"
+     ],
+     "match": "exact"
+    }
+   }
+  ],
+  "dailyPoints": [
+   {
+    "date": "2026-11-12",
+    "liquidPrudentCents": 576000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 46000,
+    "liquidWithExpectedCents": 576000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 46000
+   },
+   {
+    "date": "2026-11-13",
+    "liquidPrudentCents": 576000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 46000,
+    "liquidWithExpectedCents": 576000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 46000
+   },
+   {
+    "date": "2026-11-14",
+    "liquidPrudentCents": 576000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 46000,
+    "liquidWithExpectedCents": 576000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 46000
+   },
+   {
+    "date": "2026-11-15",
+    "liquidPrudentCents": 576000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 46000,
+    "liquidWithExpectedCents": 576000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 46000
+   },
+   {
+    "date": "2026-11-16",
+    "liquidPrudentCents": 556000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 26000,
+    "liquidWithExpectedCents": 556000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 26000
+   },
+   {
+    "date": "2026-11-17",
+    "liquidPrudentCents": 556000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 26000,
+    "liquidWithExpectedCents": 556000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 26000
+   },
+   {
+    "date": "2026-11-18",
+    "liquidPrudentCents": 556000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 26000,
+    "liquidWithExpectedCents": 556000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 26000
+   },
+   {
+    "date": "2026-11-19",
+    "liquidPrudentCents": 556000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 26000,
+    "liquidWithExpectedCents": 556000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 26000
+   },
+   {
+    "date": "2026-11-20",
+    "liquidPrudentCents": 556000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 26000,
+    "liquidWithExpectedCents": 556000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 26000
+   },
+   {
+    "date": "2026-11-21",
+    "liquidPrudentCents": 556000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 26000,
+    "liquidWithExpectedCents": 556000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 26000
+   },
+   {
+    "date": "2026-11-22",
+    "liquidPrudentCents": 556000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 26000,
+    "liquidWithExpectedCents": 556000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 26000
+   },
+   {
+    "date": "2026-11-23",
+    "liquidPrudentCents": 536000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 6000,
+    "liquidWithExpectedCents": 536000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 6000
+   },
+   {
+    "date": "2026-11-24",
+    "liquidPrudentCents": 536000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 6000,
+    "liquidWithExpectedCents": 536000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 6000
+   },
+   {
+    "date": "2026-11-25",
+    "liquidPrudentCents": 536000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 6000,
+    "liquidWithExpectedCents": 536000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 6000
+   },
+   {
+    "date": "2026-11-26",
+    "liquidPrudentCents": 536000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 6000,
+    "liquidWithExpectedCents": 536000,
+    "freeWithExpectedCents": 530000,
+    "reservedWithExpectedCents": 6000
+   },
+   {
+    "date": "2026-11-27",
+    "liquidPrudentCents": 536000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 6000,
+    "liquidWithExpectedCents": 676000,
+    "freeWithExpectedCents": 635000,
+    "reservedWithExpectedCents": 41000
+   },
+   {
+    "date": "2026-11-28",
+    "liquidPrudentCents": 536000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 6000,
+    "liquidWithExpectedCents": 676000,
+    "freeWithExpectedCents": 635000,
+    "reservedWithExpectedCents": 41000
+   },
+   {
+    "date": "2026-11-29",
+    "liquidPrudentCents": 536000,
+    "freePrudentCents": 530000,
+    "reservedPrudentCents": 6000,
+    "liquidWithExpectedCents": 676000,
+    "freeWithExpectedCents": 635000,
+    "reservedWithExpectedCents": 41000
+   },
+   {
+    "date": "2026-11-30",
+    "liquidPrudentCents": 516000,
+    "freePrudentCents": 516000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 656000,
+    "freeWithExpectedCents": 621000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-01",
+    "liquidPrudentCents": 504000,
+    "freePrudentCents": 504000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 644000,
+    "freeWithExpectedCents": 609000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-02",
+    "liquidPrudentCents": 494000,
+    "freePrudentCents": 494000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 634000,
+    "freeWithExpectedCents": 599000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-03",
+    "liquidPrudentCents": 494000,
+    "freePrudentCents": 494000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 634000,
+    "freeWithExpectedCents": 599000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-04",
+    "liquidPrudentCents": 494000,
+    "freePrudentCents": 494000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 634000,
+    "freeWithExpectedCents": 599000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-05",
+    "liquidPrudentCents": 494000,
+    "freePrudentCents": 494000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 634000,
+    "freeWithExpectedCents": 599000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-06",
+    "liquidPrudentCents": 494000,
+    "freePrudentCents": 494000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 634000,
+    "freeWithExpectedCents": 599000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-07",
+    "liquidPrudentCents": 474000,
+    "freePrudentCents": 474000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 614000,
+    "freeWithExpectedCents": 579000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-08",
+    "liquidPrudentCents": 474000,
+    "freePrudentCents": 474000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 614000,
+    "freeWithExpectedCents": 579000,
+    "reservedWithExpectedCents": 35000
+   },
+   {
+    "date": "2026-12-09",
+    "liquidPrudentCents": 474000,
+    "freePrudentCents": 474000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 794000,
+    "freeWithExpectedCents": 714000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-10",
+    "liquidPrudentCents": 474000,
+    "freePrudentCents": 474000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 794000,
+    "freeWithExpectedCents": 714000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-11",
+    "liquidPrudentCents": 474000,
+    "freePrudentCents": 474000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 794000,
+    "freeWithExpectedCents": 714000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-12",
+    "liquidPrudentCents": 474000,
+    "freePrudentCents": 474000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 794000,
+    "freeWithExpectedCents": 714000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-13",
+    "liquidPrudentCents": 474000,
+    "freePrudentCents": 474000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 794000,
+    "freeWithExpectedCents": 714000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-14",
+    "liquidPrudentCents": 454000,
+    "freePrudentCents": 454000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 774000,
+    "freeWithExpectedCents": 694000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-15",
+    "liquidPrudentCents": 454000,
+    "freePrudentCents": 454000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 774000,
+    "freeWithExpectedCents": 694000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-16",
+    "liquidPrudentCents": 454000,
+    "freePrudentCents": 454000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 774000,
+    "freeWithExpectedCents": 694000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-17",
+    "liquidPrudentCents": 454000,
+    "freePrudentCents": 454000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 774000,
+    "freeWithExpectedCents": 694000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-18",
+    "liquidPrudentCents": 454000,
+    "freePrudentCents": 454000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 774000,
+    "freeWithExpectedCents": 694000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-19",
+    "liquidPrudentCents": 454000,
+    "freePrudentCents": 454000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 774000,
+    "freeWithExpectedCents": 694000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-20",
+    "liquidPrudentCents": 454000,
+    "freePrudentCents": 454000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 774000,
+    "freeWithExpectedCents": 694000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-21",
+    "liquidPrudentCents": 434000,
+    "freePrudentCents": 434000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 754000,
+    "freeWithExpectedCents": 674000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-22",
+    "liquidPrudentCents": 434000,
+    "freePrudentCents": 434000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 754000,
+    "freeWithExpectedCents": 674000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-23",
+    "liquidPrudentCents": 434000,
+    "freePrudentCents": 434000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 754000,
+    "freeWithExpectedCents": 674000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-24",
+    "liquidPrudentCents": 434000,
+    "freePrudentCents": 434000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 754000,
+    "freeWithExpectedCents": 674000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-25",
+    "liquidPrudentCents": 434000,
+    "freePrudentCents": 434000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 754000,
+    "freeWithExpectedCents": 674000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-26",
+    "liquidPrudentCents": 434000,
+    "freePrudentCents": 434000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 754000,
+    "freeWithExpectedCents": 674000,
+    "reservedWithExpectedCents": 80000
+   },
+   {
+    "date": "2026-12-27",
+    "liquidPrudentCents": 434000,
+    "freePrudentCents": 434000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 894000,
+    "freeWithExpectedCents": 779000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2026-12-28",
+    "liquidPrudentCents": 414000,
+    "freePrudentCents": 414000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 874000,
+    "freeWithExpectedCents": 759000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2026-12-29",
+    "liquidPrudentCents": 414000,
+    "freePrudentCents": 414000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 874000,
+    "freeWithExpectedCents": 759000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2026-12-30",
+    "liquidPrudentCents": 414000,
+    "freePrudentCents": 414000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 874000,
+    "freeWithExpectedCents": 759000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2026-12-31",
+    "liquidPrudentCents": 414000,
+    "freePrudentCents": 414000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 874000,
+    "freeWithExpectedCents": 759000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2027-01-01",
+    "liquidPrudentCents": 402000,
+    "freePrudentCents": 402000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 862000,
+    "freeWithExpectedCents": 747000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2027-01-02",
+    "liquidPrudentCents": 392000,
+    "freePrudentCents": 392000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 852000,
+    "freeWithExpectedCents": 737000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2027-01-03",
+    "liquidPrudentCents": 392000,
+    "freePrudentCents": 392000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 852000,
+    "freeWithExpectedCents": 737000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2027-01-04",
+    "liquidPrudentCents": 372000,
+    "freePrudentCents": 372000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 832000,
+    "freeWithExpectedCents": 717000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2027-01-05",
+    "liquidPrudentCents": 372000,
+    "freePrudentCents": 372000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 832000,
+    "freeWithExpectedCents": 717000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2027-01-06",
+    "liquidPrudentCents": 372000,
+    "freePrudentCents": 372000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 832000,
+    "freeWithExpectedCents": 717000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2027-01-07",
+    "liquidPrudentCents": 372000,
+    "freePrudentCents": 372000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 832000,
+    "freeWithExpectedCents": 717000,
+    "reservedWithExpectedCents": 115000
+   },
+   {
+    "date": "2027-01-08",
+    "liquidPrudentCents": 372000,
+    "freePrudentCents": 372000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 1012000,
+    "freeWithExpectedCents": 852000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-09",
+    "liquidPrudentCents": 372000,
+    "freePrudentCents": 372000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 1012000,
+    "freeWithExpectedCents": 852000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-10",
+    "liquidPrudentCents": 372000,
+    "freePrudentCents": 372000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 1012000,
+    "freeWithExpectedCents": 852000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-11",
+    "liquidPrudentCents": 352000,
+    "freePrudentCents": 352000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 992000,
+    "freeWithExpectedCents": 832000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-12",
+    "liquidPrudentCents": 352000,
+    "freePrudentCents": 352000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 992000,
+    "freeWithExpectedCents": 832000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-13",
+    "liquidPrudentCents": 352000,
+    "freePrudentCents": 352000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 992000,
+    "freeWithExpectedCents": 832000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-14",
+    "liquidPrudentCents": 352000,
+    "freePrudentCents": 352000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 992000,
+    "freeWithExpectedCents": 832000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-15",
+    "liquidPrudentCents": 352000,
+    "freePrudentCents": 352000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 992000,
+    "freeWithExpectedCents": 832000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-16",
+    "liquidPrudentCents": 352000,
+    "freePrudentCents": 352000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 992000,
+    "freeWithExpectedCents": 832000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-17",
+    "liquidPrudentCents": 352000,
+    "freePrudentCents": 352000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 992000,
+    "freeWithExpectedCents": 832000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-18",
+    "liquidPrudentCents": 332000,
+    "freePrudentCents": 332000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 972000,
+    "freeWithExpectedCents": 812000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-19",
+    "liquidPrudentCents": 332000,
+    "freePrudentCents": 332000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 972000,
+    "freeWithExpectedCents": 812000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-20",
+    "liquidPrudentCents": 332000,
+    "freePrudentCents": 332000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 972000,
+    "freeWithExpectedCents": 812000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-21",
+    "liquidPrudentCents": 332000,
+    "freePrudentCents": 332000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 972000,
+    "freeWithExpectedCents": 812000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-22",
+    "liquidPrudentCents": 332000,
+    "freePrudentCents": 332000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 972000,
+    "freeWithExpectedCents": 812000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-23",
+    "liquidPrudentCents": 332000,
+    "freePrudentCents": 332000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 972000,
+    "freeWithExpectedCents": 812000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-24",
+    "liquidPrudentCents": 332000,
+    "freePrudentCents": 332000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 972000,
+    "freeWithExpectedCents": 812000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-25",
+    "liquidPrudentCents": 312000,
+    "freePrudentCents": 312000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 952000,
+    "freeWithExpectedCents": 792000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-26",
+    "liquidPrudentCents": 312000,
+    "freePrudentCents": 312000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 952000,
+    "freeWithExpectedCents": 792000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-27",
+    "liquidPrudentCents": 312000,
+    "freePrudentCents": 312000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 952000,
+    "freeWithExpectedCents": 792000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-28",
+    "liquidPrudentCents": 312000,
+    "freePrudentCents": 312000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 952000,
+    "freeWithExpectedCents": 792000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-29",
+    "liquidPrudentCents": 312000,
+    "freePrudentCents": 312000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 952000,
+    "freeWithExpectedCents": 792000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-30",
+    "liquidPrudentCents": 312000,
+    "freePrudentCents": 312000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 952000,
+    "freeWithExpectedCents": 792000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-01-31",
+    "liquidPrudentCents": 312000,
+    "freePrudentCents": 312000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 952000,
+    "freeWithExpectedCents": 792000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-02-01",
+    "liquidPrudentCents": 280000,
+    "freePrudentCents": 280000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 920000,
+    "freeWithExpectedCents": 760000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-02-02",
+    "liquidPrudentCents": 270000,
+    "freePrudentCents": 270000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 910000,
+    "freeWithExpectedCents": 750000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-02-03",
+    "liquidPrudentCents": 270000,
+    "freePrudentCents": 270000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 910000,
+    "freeWithExpectedCents": 750000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-02-04",
+    "liquidPrudentCents": 270000,
+    "freePrudentCents": 270000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 910000,
+    "freeWithExpectedCents": 750000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-02-05",
+    "liquidPrudentCents": 270000,
+    "freePrudentCents": 270000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 910000,
+    "freeWithExpectedCents": 750000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-02-06",
+    "liquidPrudentCents": 270000,
+    "freePrudentCents": 270000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 910000,
+    "freeWithExpectedCents": 750000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-02-07",
+    "liquidPrudentCents": 270000,
+    "freePrudentCents": 270000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 910000,
+    "freeWithExpectedCents": 750000,
+    "reservedWithExpectedCents": 160000
+   },
+   {
+    "date": "2027-02-08",
+    "liquidPrudentCents": 250000,
+    "freePrudentCents": 250000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 1070000,
+    "freeWithExpectedCents": 865000,
+    "reservedWithExpectedCents": 205000
+   },
+   {
+    "date": "2027-02-09",
+    "liquidPrudentCents": 250000,
+    "freePrudentCents": 250000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 1070000,
+    "freeWithExpectedCents": 865000,
+    "reservedWithExpectedCents": 205000
+   },
+   {
+    "date": "2027-02-10",
+    "liquidPrudentCents": 250000,
+    "freePrudentCents": 250000,
+    "reservedPrudentCents": 0,
+    "liquidWithExpectedCents": 1070000,
+    "freeWithExpectedCents": 865000,
+    "reservedWithExpectedCents": 205000
+   }
+  ],
+  "end": {
+   "date": "2027-02-10",
+   "liquidPrudentCents": 250000,
+   "freePrudentCents": 250000,
+   "liquidWithExpectedCents": 1070000,
+   "freeWithExpectedCents": 865000
+  },
+  "monthlyCashflow": [
+   {
+    "month": "2026-11",
+    "expectedIncomeCents": 140000,
+    "outBudgetCents": 114000,
+    "outFixedCents": 0,
+    "outInvestmentCents": 10000,
+    "outTotalCents": 124000,
+    "netPrudentCents": -124000,
+    "netWithExpectedCents": 16000,
+    "liquidPrudentEndCents": 516000,
+    "liquidWithExpectedEndCents": 656000,
+    "freePrudentEndCents": 516000
+   },
+   {
+    "month": "2026-12",
+    "expectedIncomeCents": 320000,
+    "outBudgetCents": 80000,
+    "outFixedCents": 12000,
+    "outInvestmentCents": 10000,
+    "outTotalCents": 102000,
+    "netPrudentCents": -102000,
+    "netWithExpectedCents": 218000,
+    "liquidPrudentEndCents": 414000,
+    "liquidWithExpectedEndCents": 874000,
+    "freePrudentEndCents": 414000
+   },
+   {
+    "month": "2027-01",
+    "expectedIncomeCents": 180000,
+    "outBudgetCents": 80000,
+    "outFixedCents": 12000,
+    "outInvestmentCents": 10000,
+    "outTotalCents": 102000,
+    "netPrudentCents": -102000,
+    "netWithExpectedCents": 78000,
+    "liquidPrudentEndCents": 312000,
+    "liquidWithExpectedEndCents": 952000,
+    "freePrudentEndCents": 312000
+   },
+   {
+    "month": "2027-02",
+    "expectedIncomeCents": 180000,
+    "outBudgetCents": 80000,
+    "outFixedCents": 12000,
+    "outInvestmentCents": 10000,
+    "outTotalCents": 102000,
+    "netPrudentCents": -102000,
+    "netWithExpectedCents": 78000,
+    "liquidPrudentEndCents": 210000,
+    "liquidWithExpectedEndCents": 1030000,
+    "freePrudentEndCents": 210000
+   },
+   {
+    "month": "2027-03",
+    "expectedIncomeCents": 180000,
+    "outBudgetCents": 100000,
+    "outFixedCents": 12000,
+    "outInvestmentCents": 10000,
+    "outTotalCents": 122000,
+    "netPrudentCents": -122000,
+    "netWithExpectedCents": 58000,
+    "liquidPrudentEndCents": 88000,
+    "liquidWithExpectedEndCents": 1088000,
+    "freePrudentEndCents": 88000
+   },
+   {
+    "month": "2027-04",
+    "expectedIncomeCents": 180000,
+    "outBudgetCents": 80000,
+    "outFixedCents": 12000,
+    "outInvestmentCents": 10000,
+    "outTotalCents": 102000,
+    "netPrudentCents": -102000,
+    "netWithExpectedCents": 78000,
+    "liquidPrudentEndCents": -14000,
+    "liquidWithExpectedEndCents": 1166000,
+    "freePrudentEndCents": -14000
+   }
+  ],
+  "coverageOfExpenses": {
+   "verdict": {
+    "minFree": 250000,
+    "minFreeDate": "2027-02-08",
+    "minFreeWithExpected": 530000,
+    "minFreeWithExpectedDate": "2026-11-12",
+    "uncovered": 0,
+    "dependOnReceipts": 0,
+    "shortfallPrudent": 0,
+    "shortfallWithExpected": 0,
+    "partial": [],
+    "level": "ok"
+   },
+   "totals": {
+    "inExpected": 820000,
+    "inFree": 615000,
+    "outFixed": 36000,
+    "outBudget": 314000,
+    "outInvest": 40000,
+    "outTotal": 390000,
+    "outFree": 280000,
+    "freeEnd": 250000,
+    "freeEndWithExpected": 865000,
+    "totalEnd": 250000,
+    "totalEndWithExpected": 1070000
+   },
+   "months": [
+    {
+     "month": "2026-11",
+     "from": "2026-11-12",
+     "to": "2026-11-30",
+     "expectedIncomeCents": 140000,
+     "expectedIncomeFreeAfterReserveCents": 105000,
+     "outTotalCents": 124000,
+     "freeEndPrudentCents": 516000,
+     "freeEndWithExpectedCents": 621000
+    },
+    {
+     "month": "2026-12",
+     "from": "2026-12-01",
+     "to": "2026-12-31",
+     "expectedIncomeCents": 320000,
+     "expectedIncomeFreeAfterReserveCents": 240000,
+     "outTotalCents": 102000,
+     "freeEndPrudentCents": 414000,
+     "freeEndWithExpectedCents": 759000
+    },
+    {
+     "month": "2027-01",
+     "from": "2027-01-01",
+     "to": "2027-01-31",
+     "expectedIncomeCents": 180000,
+     "expectedIncomeFreeAfterReserveCents": 135000,
+     "outTotalCents": 102000,
+     "freeEndPrudentCents": 312000,
+     "freeEndWithExpectedCents": 792000
+    },
+    {
+     "month": "2027-02",
+     "from": "2027-02-01",
+     "to": "2027-02-10",
+     "expectedIncomeCents": 180000,
+     "expectedIncomeFreeAfterReserveCents": 135000,
+     "outTotalCents": 62000,
+     "freeEndPrudentCents": 250000,
+     "freeEndWithExpectedCents": 865000
+    }
+   ],
+   "lines": [
+    {
+     "date": "2026-11-12",
+     "direction": "out",
+     "type": "budget",
+     "label": "Budget settimanale (4 settimane)",
+     "amountCents": -114000,
+     "effectOnFreeCents": -14000,
+     "status": "ok",
+     "freeAfterPrudentCents": 516000,
+     "freeAfterWithExpectedCents": 621000
+    },
+    {
+     "date": "2026-11-12",
+     "direction": "out",
+     "type": "investimento",
+     "label": "PAC",
+     "amountCents": -10000,
+     "effectOnFreeCents": 0,
+     "status": "ok",
+     "freeAfterPrudentCents": 530000,
+     "freeAfterWithExpectedCents": 530000
+    },
+    {
+     "date": "2026-11-27",
+     "direction": "in",
+     "type": "incasso",
+     "label": "Cliente Beta",
+     "amountCents": 140000,
+     "effectOnFreeCents": 105000,
+     "status": null,
+     "freeAfterPrudentCents": 530000,
+     "freeAfterWithExpectedCents": 635000
+    },
+    {
+     "date": "2026-12-01",
+     "direction": "out",
+     "type": "scadenza",
+     "label": "Corso",
+     "amountCents": -12000,
+     "effectOnFreeCents": -12000,
+     "status": "ok",
+     "freeAfterPrudentCents": 504000,
+     "freeAfterWithExpectedCents": 609000
+    },
+    {
+     "date": "2026-12-02",
+     "direction": "out",
+     "type": "investimento",
+     "label": "PAC",
+     "amountCents": -10000,
+     "effectOnFreeCents": -10000,
+     "status": "ok",
+     "freeAfterPrudentCents": 494000,
+     "freeAfterWithExpectedCents": 599000
+    },
+    {
+     "date": "2026-12-07",
+     "direction": "out",
+     "type": "budget",
+     "label": "Budget settimanale (4 settimane)",
+     "amountCents": -80000,
+     "effectOnFreeCents": -80000,
+     "status": "ok",
+     "freeAfterPrudentCents": 414000,
+     "freeAfterWithExpectedCents": 759000
+    },
+    {
+     "date": "2026-12-09",
+     "direction": "in",
+     "type": "incasso",
+     "label": "Cliente A",
+     "amountCents": 120000,
+     "effectOnFreeCents": 90000,
+     "status": null,
+     "freeAfterPrudentCents": 474000,
+     "freeAfterWithExpectedCents": 714000
+    },
+    {
+     "date": "2026-12-09",
+     "direction": "in",
+     "type": "incasso",
+     "label": "Cliente B",
+     "amountCents": 60000,
+     "effectOnFreeCents": 45000,
+     "status": null,
+     "freeAfterPrudentCents": 474000,
+     "freeAfterWithExpectedCents": 714000
+    },
+    {
+     "date": "2026-12-27",
+     "direction": "in",
+     "type": "incasso",
+     "label": "Cliente Beta",
+     "amountCents": 140000,
+     "effectOnFreeCents": 105000,
+     "status": null,
+     "freeAfterPrudentCents": 434000,
+     "freeAfterWithExpectedCents": 779000
+    },
+    {
+     "date": "2027-01-01",
+     "direction": "out",
+     "type": "scadenza",
+     "label": "Corso",
+     "amountCents": -12000,
+     "effectOnFreeCents": -12000,
+     "status": "ok",
+     "freeAfterPrudentCents": 402000,
+     "freeAfterWithExpectedCents": 747000
+    },
+    {
+     "date": "2027-01-02",
+     "direction": "out",
+     "type": "investimento",
+     "label": "PAC",
+     "amountCents": -10000,
+     "effectOnFreeCents": -10000,
+     "status": "ok",
+     "freeAfterPrudentCents": 392000,
+     "freeAfterWithExpectedCents": 737000
+    },
+    {
+     "date": "2027-01-04",
+     "direction": "out",
+     "type": "budget",
+     "label": "Budget settimanale (4 settimane)",
+     "amountCents": -80000,
+     "effectOnFreeCents": -80000,
+     "status": "ok",
+     "freeAfterPrudentCents": 312000,
+     "freeAfterWithExpectedCents": 792000
+    },
+    {
+     "date": "2027-01-08",
+     "direction": "in",
+     "type": "incasso",
+     "label": "Cliente A",
+     "amountCents": 120000,
+     "effectOnFreeCents": 90000,
+     "status": null,
+     "freeAfterPrudentCents": 372000,
+     "freeAfterWithExpectedCents": 852000
+    },
+    {
+     "date": "2027-01-08",
+     "direction": "in",
+     "type": "incasso",
+     "label": "Cliente B",
+     "amountCents": 60000,
+     "effectOnFreeCents": 45000,
+     "status": null,
+     "freeAfterPrudentCents": 372000,
+     "freeAfterWithExpectedCents": 852000
+    },
+    {
+     "date": "2027-02-01",
+     "direction": "out",
+     "type": "budget",
+     "label": "Budget settimanale (2 settimane)",
+     "amountCents": -40000,
+     "effectOnFreeCents": -40000,
+     "status": "ok",
+     "freeAfterPrudentCents": 250000,
+     "freeAfterWithExpectedCents": 865000
+    },
+    {
+     "date": "2027-02-01",
+     "direction": "out",
+     "type": "scadenza",
+     "label": "Corso",
+     "amountCents": -12000,
+     "effectOnFreeCents": -12000,
+     "status": "ok",
+     "freeAfterPrudentCents": 280000,
+     "freeAfterWithExpectedCents": 760000
+    },
+    {
+     "date": "2027-02-02",
+     "direction": "out",
+     "type": "investimento",
+     "label": "PAC",
+     "amountCents": -10000,
+     "effectOnFreeCents": -10000,
+     "status": "ok",
+     "freeAfterPrudentCents": 270000,
+     "freeAfterWithExpectedCents": 750000
+    },
+    {
+     "date": "2027-02-08",
+     "direction": "in",
+     "type": "incasso",
+     "label": "Cliente A",
+     "amountCents": 120000,
+     "effectOnFreeCents": 90000,
+     "status": null,
+     "freeAfterPrudentCents": 250000,
+     "freeAfterWithExpectedCents": 865000
+    },
+    {
+     "date": "2027-02-08",
+     "direction": "in",
+     "type": "incasso",
+     "label": "Cliente B",
+     "amountCents": 60000,
+     "effectOnFreeCents": 45000,
+     "status": null,
+     "freeAfterPrudentCents": 250000,
+     "freeAfterWithExpectedCents": 865000
+    }
+   ],
+   "overdueReceivablesNotCounted": [
+    {
+     "client": "Cliente Gamma",
+     "expectedDate": "2026-11-02",
+     "amountCents": 45000
+    }
+   ],
+   "statusLegend": {
+    "ok": "coperta dal libero",
+    "con_incassi": "coperta solo se arrivano gli incassi previsti",
+    "scoperta": "non coperta"
+   }
+  }
+ },
+ "dataQuality": {
+  "classification": {
+   "effective": [
+    "currentSituation.accounts[].balanceCents (quando noto)",
+    "movements.transactions",
+    "movements.transfers (status posted)",
+    "receivables con status received/partial (parte ricevuta)"
+   ],
+   "virtualAccountingConstraints": [
+    "movements.allocations",
+    "fundsAndGoals.*.locations",
+    "currentSituation.accounts[].reservations"
+   ],
+   "planned": [
+    "expenses.plannedItems",
+    "receivables con status expected/partial (parte attesa)",
+    "recurringIncome.invoices"
+   ],
+   "projected": [
+    "projections.*"
+   ],
+   "estimated": [
+    "tax.*",
+    "receivables[].projection",
+    "receivables[].taxReserve quando non impostata",
+    "history.monthly[].theoreticalTaxEstimateCents"
+   ]
+  },
+  "unconfirmedOrMissing": [
+   {
+    "type": "planned_item_date_to_confirm",
+    "plannedId": "id0022"
+   },
+   {
+    "type": "planned_item_to_confirm_as_active",
+    "plannedId": "id0024"
+   },
+   {
+    "type": "bank_transfer_to_confirm",
+    "fundId": "id0013",
+    "fromAccountId": "id0001",
+    "toAccountId": "id0002",
+    "cents": 7500
+   },
+   {
+    "type": "bank_transfer_to_confirm",
+    "fundId": "id0081",
+    "fromAccountId": "id0005",
+    "toAccountId": "id0003",
+    "cents": 10000
+   },
+   {
+    "type": "fund_provisional",
+    "fundId": "id0008"
+   },
+   {
+    "type": "goal_target_to_define",
+    "fundId": "id0011"
+   },
+   {
+    "type": "recurring_invoice_to_review",
+    "templateId": "id0015"
+   },
+   {
+    "type": "receivable_overdue_not_received",
+    "receivableId": "id0066"
+   },
+   {
+    "type": "tax_rates_not_verified_for_year",
+    "year": 2026
+   }
+  ],
+  "balances": {
+   "computedAt": "2026-11-12T10:30:00.000Z",
+   "method": "saldo iniziale + movimenti registrati + trasferimenti",
+   "latestBalanceAdjustmentDate": null,
+   "accountsWithUnknownBalance": []
+  },
+  "notAvailable": [
+   "data/ora di \"ultimo aggiornamento\" dedicata a ciascun saldo (il modello conserva solo data di apertura, rettifiche e quadrature)",
+   "IBAN, numeri di conto, password e chiavi di cifratura (volutamente esclusi; l'app non li conserva)",
+   "estratti conto bancari importati (l'app non li importa)"
+  ]
+ },
+ "reference": {
+  "categories": [
+   {
+    "id": "cat_food",
+    "name": "Alimentari",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_eat",
+    "name": "Ristoranti e bar",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_fun",
+    "name": "Sport e tempo libero",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_fuel",
+    "name": "Carburante",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_transport",
+    "name": "Trasporti",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_shop",
+    "name": "Abbigliamento",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_gifts",
+    "name": "Regali",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_tech",
+    "name": "Tecnologia",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_health",
+    "name": "Salute",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_travel",
+    "name": "Viaggi",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_travel_clothes",
+    "name": "Viaggi · abbigliamento",
+    "kind": "expense",
+    "parentId": "cat_travel",
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_subs",
+    "name": "Abbonamenti",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_phone",
+    "name": "Telefonia",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_insurance",
+    "name": "Assicurazioni",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_home",
+    "name": "Casa e utenze",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_prof",
+    "name": "Spese professionali",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_other",
+    "name": "Altro",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": true
+   },
+   {
+    "id": "cat_inps",
+    "name": "Previdenza · contributi INPS versati",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_tax",
+    "name": "Imposte · imposta sostitutiva versata",
+    "kind": "expense",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_invest",
+    "name": "Investimenti (PAC)",
+    "kind": "investment",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_pro",
+    "name": "Incassi professionali",
+    "kind": "income",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_in_other",
+    "name": "Altre entrate",
+    "kind": "income",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   },
+   {
+    "id": "cat_adj",
+    "name": "Rettifica di quadratura",
+    "kind": "adjustment",
+    "parentId": null,
+    "countsInWeeklyBudget": false
+   }
+  ],
+  "settings": {
+   "weekStartsOn": 1,
+   "forecastDays": 90,
+   "urgentDays": 30,
+   "taxRules": []
+  }
+ }
+}

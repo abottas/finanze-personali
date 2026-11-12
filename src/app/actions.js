@@ -17,6 +17,7 @@ import { createBackup, verifyBackup } from '../crypto/backup.js';
 import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { runIntegrityChecks } from '../core/integrity.js';
 import { estimateTaxes, grossForNet } from '../core/tax.js';
+import { aiExportJson } from '../core/export-ai.js';
 import { situationCsv, statsCsv, forecastSummaryCsv, forecastDetailCsv } from '../core/reports.js';
 
 const ACC_TYPES = [['checking', 'Conto corrente'], ['savings', 'Risparmio'], ['cash', 'Contanti'], ['investment', 'Investimento (PAC) · non è liquidità'], ['other', 'Altro']];
@@ -853,6 +854,20 @@ export function createActions(api) {
       app.ui.situationUntil = el.dataset.v === 'eom' ? eom(y, m) : el.dataset.v === 'eom2' ? (m === 12 ? eom(y + 1, 1) : eom(y, m + 1)) : `${y}-12-31`;
       if (app.ui.situationUntil <= t) app.ui.situationUntil = el.dataset.v === 'dec' ? `${y + 1}-12-31` : eom(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1);
       location.hash = '#/situation'; api.render();
+    },
+    'export-ai': () => {
+      api.openSheet({
+        title: 'Esporta situazione per ChatGPT', submit: 'Crea file',
+        body: html`<div class="note">Crea <b>un unico file JSON</b> con la fotografia dell'app: saldi, fondi, incassi, spese, movimenti e proiezioni già calcolate. Non aggiunge calcoli e non esporta password, chiavi o IBAN. <b>Il file non è cifrato</b> e contiene anche le note che hai scritto sui movimenti: condividilo solo dove vuoi che arrivi.</div>
+          <label class="check"><input type="checkbox" name="ack" required><span>Ho capito che il file non è cifrato</span></label>`,
+        onSubmit: async () => {
+          const name = `situazione-chatgpt-${app.today}.json`;
+          const text = aiExportJson(st(), { today: app.today, nowIso: new Date().toISOString(), appVersion: app.version });
+          const file = new File([text], name, { type: 'application/json' });
+          if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e?.name === 'AbortError') return; } }
+          saveBlob(name, text, 'application/json');
+        },
+      });
     },
     'export-situation': () => {
       const until = app.ui.situationUntil ?? app.today;

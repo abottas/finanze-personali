@@ -480,7 +480,8 @@ function settingsBackup(app, back) {
     <section class="card"><button class="btn primary block" data-action="export-backup">${I.save} Crea backup cifrato</button>
       <div class="spacer10"></div><button class="btn block" data-action="verify-backup">Verifica un backup (senza ripristinare)</button>
       <div class="spacer10"></div><button class="btn block" data-action="restore-backup">Ripristina da backup</button></section>
-    <section class="card"><h2>Esporta in chiaro</h2><p class="small muted mt0">CSV dei movimenti, <b>non cifrato</b>: chi riceve il file vede tutto.</p><button class="btn block" data-action="export-csv">Esporta movimenti (CSV)</button></section></div>`;
+    <section class="card"><h2>Esporta in chiaro</h2><p class="small muted mt0">CSV dei movimenti, <b>non cifrato</b>: chi riceve il file vede tutto.</p><button class="btn block" data-action="export-csv">Esporta movimenti (CSV)</button>
+      <p class="small muted">Un unico file JSON con la situazione completa (saldi, fondi, incassi, spese, proiezioni) per farla analizzare da ChatGPT. <b>Non è cifrato.</b></p><button class="btn block" data-action="export-ai">Esporta situazione per ChatGPT</button></section></div>`;
 }
 function settingsIntegrity(app, back) {
   const r = app.integrity;

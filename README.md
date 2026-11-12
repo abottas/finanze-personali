@@ -71,3 +71,6 @@ Se in **Actions** l'esecuzione "pages build and deployment" resta in coda o fall
 
 ## Tasse sull'incassato dell'anno (v0.9)
 In Impostazioni → Tasse e contributi: stima per cassa (solo incassi realmente ricevuti nell'anno), con "Aggiungi già incassato" per i dati prima dell'uso dell'app (nessun doppio conteggio dopo la data indicata) e uno scenario non garantito con gli incassi attesi entro il 31 dicembre.
+
+## Esporta situazione per ChatGPT (v0.14)
+Impostazioni → Backup → "Esporta situazione per ChatGPT": un unico file JSON (schema `finanze-personali/situazione-per-analisi` 1.0.0) con saldi, fondi, incassi, spese, movimenti e proiezioni **già calcolate dall'app** (nessun ricalcolo, modulo di sola lettura `src/core/export-ai.js`). Non contiene password, chiavi né IBAN; **non è cifrato**. Esempio con dati inventati: `docs/esempio-esportazione-chatgpt.json` (rigenerabile con `node scripts/make-sample-export.mjs`).
