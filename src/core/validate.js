@@ -172,6 +172,9 @@ export function validateState(st) {
     if (b.accountId != null && !has('accounts', b.accountId)) bad('budget: conto inesistente');
     if (b.fundId != null && (!has('funds', b.fundId) || st.funds.find((f) => f.id === b.fundId)?.kind !== 'budget')) bad('budget: fondo inesistente o non di tipo budget');
     if (b.lastFundedWeek != null && !isDate(b.lastFundedWeek)) bad('budget: data di finanziamento non valida');
+    if (!Number.isInteger(b.advanceWeeks) || b.advanceWeeks < 0 || b.advanceWeeks > 4) bad('budget: settimane in anticipo non valide');
+    if (b.sourceAccountId != null && (!has('accounts', b.sourceAccountId) || b.sourceAccountId === b.accountId)) bad('budget: conto di appoggio non valido');
+    if (b.advanceWeeks > 0 && b.sourceAccountId == null) bad('budget: servono un conto di appoggio per finanziare in anticipo');
   }
   if (!Array.isArray(s.taxRules)) bad('impostazioni: regole fiscali mancanti');
   else for (const r of s.taxRules) {

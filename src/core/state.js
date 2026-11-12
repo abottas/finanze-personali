@@ -45,7 +45,7 @@ export function defaultSettings(today) {
     backupReminderDays: 14,
     forecastDays: 90,
     urgentDays: 30,
-    budget: { weeklyCents: 0, startDate: today, carryOver: true, carryDeficit: true, accountId: null, fundId: null, lastFundedWeek: null },
+    budget: { weeklyCents: 0, startDate: today, carryOver: true, carryDeficit: true, accountId: null, fundId: null, lastFundedWeek: null, advanceWeeks: 0, sourceAccountId: null },
     taxRules: [],
     taxProfile: defaultTaxProfile(),
   };
@@ -107,6 +107,7 @@ export function migrateState(st) {
   for (const t of st.invoiceTemplates ?? []) { t.reserveCents ??= null; t.review ??= false; t.note ??= ''; t.origin ??= null; }
   st.settings.taxProfile.verifiedYear ??= null;
   st.settings.taxProfile.opening ??= null;
+  st.settings.budget.advanceWeeks ??= 0; st.settings.budget.sourceAccountId ??= null;
   st.settings.taxProfile.inpsDeduction ??= 'accrued';
   if (st.settings.budget) { st.settings.budget.accountId ??= null; st.settings.budget.fundId ??= null; st.settings.budget.lastFundedWeek ??= null; }
   for (const p of st.planned ?? []) { p.categoryId ??= 'cat_other'; p.autoPay ??= false; p.remindDays ??= 2; p.confirm ??= null; p.origin ??= null; p.toAccountId ??= null; p.autoExecute ??= false; }

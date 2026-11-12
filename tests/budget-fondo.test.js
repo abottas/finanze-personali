@@ -171,3 +171,69 @@ test('profilo: il fondo budget nasce NON finanziato e si finanzia da solo solo q
   const out = await run(s, W1); assert.equal(out.result.funded, 20000);
   assert.equal(snapshot(out.state).funds[bf.id].available, 20000);
 });
+
+// ───── Settimane finanziate in anticipo da un conto di appoggio ─────
+import { pendingTransfers } from '../src/core/derive.js';
+const byAcc = (s, f, a) => snapshot(s).funds[f].byAccount[a] ?? 0;
+
+test('anticipo: settimana corrente sul conto spese, settimane future sul conto di appoggio; bonifico da confermare solo per la parte corrente', async () => {
+  let { s, rev, isy, fund: f } = await setup({ cash: 10000 });     // Revolut 100 €, Isybank 1.000 €
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: isy })).state;
+  const out = await run(s, W1, { force: true }); s = out.state;
+  assert.equal(out.result.level, 22000 * 4);
+  assert.equal(out.result.shortfall, 0);
+  assert.equal(byAcc(s, f, rev), 10000);                           // tutto il libero di Revolut
+  assert.equal(byAcc(s, f, isy), 88000 - 10000);                   // il resto (parte corrente 120 + 3 settimane) su Isybank
+  assert.deepEqual(pendingTransfers(s, snapshot(s)).map((p) => [p.fromAccountId, p.cents]), [[isy, 12000]]);   // solo 120 € da spostare: le 3 settimane future restano ferme
+  assert.equal(snapshot(s).freeByAccount[isy], 100000 - 78000);
+  assert.deepEqual(validateState(s), []); assert.equal((await runIntegrityChecks(s)).ok, true);
+});
+
+test('anticipo: se il libero non basta lo dichiara (settimane coperte parzialmente) e non va in negativo', async () => {
+  let { s, isy } = await setup({ cash: 0 });
+  s = (await C.updateBudget(s, ctx(), { weeklyCents: 40000 })).state;      // 4 settimane = 1.600 €, su Isybank ce ne sono 1.000
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: isy })).state;
+  const out = await run(s, W1, { force: true });
+  assert.equal(out.result.funded, 100000);                         // solo ciò che c'è su Isybank
+  assert.equal(out.result.shortfall, 60000);                       // e lo dichiara
+  assert.ok(snapshot(out.state).freeByAccount[isy] >= 0);
+});
+
+test('anticipo: confermando il bonifico il denaro diventa spendibile sul conto spese; il lunedì dopo si ripristina il livello', async () => {
+  let { s, rev, isy, fund: f } = await setup({ cash: 0 });
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
+  s = (await run(s, W1, { force: true })).state;                    // 3 settimane su Isybank: 660
+  const pend = pendingTransfers(s, snapshot(s))[0]; assert.equal(pend.cents, 22000);
+  s = (await C.confirmFundTransfer(s, ctx(), { fundId: f, fromAccountId: isy, toAccountId: rev, cents: 22000 })).state;
+  assert.equal(byAcc(s, f, rev), 22000); assert.equal(byAcc(s, f, isy), 44000);
+  assert.equal(pendingTransfers(s, snapshot(s)).length, 0);
+  s = await spend(s, rev, 20000, '2026-06-17');                      // spendo 200
+  const out = await run(s, W2); s = out.state;                       // lunedì dopo: livello = 220 + riporto 20 (+ 2 sett.)
+  assert.equal(out.result.level, 24000 + 44000);
+  assert.equal(byAcc(s, f, rev) + byAcc(s, f, isy), 68000);
+  assert.equal(pendingTransfers(s, snapshot(s)).reduce((t, p) => t + p.cents, 0), 22000);   // un solo bonifico: una settimana
+});
+
+test('anticipo: ridurre le settimane rilascia prima il conto di appoggio; validazioni', async () => {
+  let { s, rev, isy, fund: f } = await setup({ cash: 22000 });
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
+  s = (await run(s, W1, { force: true })).state;
+  assert.equal(byAcc(s, f, isy), 44000);
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 0 })).state;
+  const out = await run(s, W1, { force: true }); s = out.state;
+  assert.equal(byAcc(s, f, isy), 0); assert.equal(byAcc(s, f, rev), 22000);
+  await expectError(C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: rev }), 'conto_non_valido');
+  await expectError(C.setBudgetAdvance(s, ctx(), { weeks: 9, sourceAccountId: isy }), 'settimane');
+});
+
+test('anticipo: la previsione non conta due volte le settimane già finanziate', async () => {
+  let { s, isy } = await setup({ cash: 22000 });
+  const noAdv = forecast(s, W1, 40);
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
+  s = (await run(s, W1, { force: true })).state;
+  const adv = forecast(s, W1, 40);
+  const fut = (f) => f.events.filter((e) => e.kind === 'budget' && e.date > W1);
+  assert.equal(fut(adv).slice(0, 2).every((e) => e.free === 0), true);       // le prime due settimane future sono già riservate
+  assert.ok(fut(noAdv).every((e) => e.free < 0));
+  assert.equal(fut(adv)[0].total, -22000);                                   // ma il totale di cassa esce comunque
+});

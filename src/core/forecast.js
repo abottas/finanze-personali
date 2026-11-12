@@ -48,9 +48,14 @@ export function forecast(state, today, days = state.settings.forecastDays) {
       const unfunded = Math.max(0, bs.remainingCents - Math.min(bf, bs.remainingCents));
       events.push({ date: today, kind: 'budget', label: 'Budget settimana (residuo)', total: -bs.remainingCents, free: unfunded ? -unfunded : 0, prudent: true });
     }
+    // Settimane già finanziate in anticipo: la parte riservata oltre la settimana corrente non pesa di nuovo sul libero.
+    let pre = Math.max(0, bf - Math.max(0, bs.remainingCents));
     let ws = addDays(bs.weekStart, 7);
     while (ws <= end) {
-      if (ws >= state.settings.budget.startDate) events.push({ date: ws, kind: 'budget', label: 'Budget settimanale', total: -bs.baseCents, free: -bs.baseCents, prudent: true });
+      if (ws >= state.settings.budget.startDate) {
+        const cover = Math.min(pre, bs.baseCents); pre -= cover;
+        events.push({ date: ws, kind: 'budget', label: 'Budget settimanale', total: -bs.baseCents, free: -(bs.baseCents - cover), prudent: true });
+      }
       ws = addDays(ws, 7);
     }
   }

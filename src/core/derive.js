@@ -76,7 +76,11 @@ export function pendingTransfers(state, snap) {
   for (const f of state.funds) {
     if (f.archived) continue;
     for (const [acc, cents] of Object.entries(snap.funds[f.id].byAccount)) {
-      if (acc !== f.accountId && cents > 0) out.push({ fundId: f.id, fromAccountId: acc, toAccountId: f.accountId, cents });
+      let c = cents;
+      // Budget finanziato in anticipo: le settimane future restano volutamente sul conto di appoggio; da spostare è solo il resto.
+      const b = state.settings.budget;
+      if (f.id === b.fundId && acc === b.sourceAccountId) c = Math.max(0, cents - (b.advanceWeeks ?? 0) * b.weeklyCents);
+      if (acc !== f.accountId && c > 0) out.push({ fundId: f.id, fromAccountId: acc, toAccountId: f.accountId, cents: c });
     }
   }
   return out;

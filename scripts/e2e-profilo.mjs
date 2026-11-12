@@ -58,6 +58,14 @@ assert.doesNotMatch(await g.textContent('.screen'), /non del tutto finanziato/);
 await gshot('41-budget-finanziato');
 const budgetRow = await g.textContent('.screen');
 assert.match(budgetRow, /Budget settimanale/);                                         // il fondo compare tra i soldi del conto spese
+step('BUDGET: settimane in anticipo da un conto di appoggio');
+await g.evaluate(() => { location.hash = '#/settings/budget'; }); await g.waitForSelector('button[data-action=budget-advance]');
+await g.click('button[data-action=budget-advance]'); await g.waitForSelector('.sheet');
+await g.selectOption('.sheet select[name=weeks]', '2'); await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' });
+await g.waitForFunction(() => /Settimane finanziate in anticipo\s*2/.test(document.body.textContent)); await gshot('41b-budget-anticipo');
+await g.click('button[data-action=budget-advance]'); await g.waitForSelector('.sheet'); await g.selectOption('.sheet select[name=weeks]', '0');
+await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' });
+await g.evaluate(() => { location.hash = '#/overview'; }); await g.waitForTimeout(300);
 step('Trade Republic raggruppata in due tasche (Tasse + PAC): il PAC non è liquidità');
 const mapTxt = await g.textContent('.screen');
 assert.match(mapTxt, /2 tasche/); assert.match(mapTxt, /Investito · non è liquidità/); assert.match(mapTxt, /Riserva fiscale \(liquidità\)/);

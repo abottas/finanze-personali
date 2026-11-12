@@ -753,6 +753,22 @@ export function createActions(api) {
       const r = await api.commit((s, c) => C.runBudgetFunding(s, c, { force: true }));
       api.toast(r.skipped === 'saldo_da_aggiornare' ? 'Aggiorna prima il saldo del conto spese' : r.funded > 0 ? `Riservati altri ${formatEuro(r.funded)}${r.shortfall > 0 ? ` · mancano ancora ${formatEuro(r.shortfall)}` : ''}` : r.shortfall > 0 ? `Nessun denaro libero: mancano ${formatEuro(r.shortfall)}` : 'Il budget è già finanziato');
     },
+    'budget-advance': () => {
+      const b = st().settings.budget;
+      const others = accOpts().filter(([id]) => id !== b.accountId);
+      if (!others.length) { api.toast('Serve un secondo conto come appoggio', true); return; }
+      api.openSheet({
+        title: 'Settimane finanziate in anticipo', submit: 'Salva',
+        body: html`<div class="note">Oltre alla settimana corrente, l'app riserva ${formatEuro(b.weeklyCents)} per ciascuna delle prossime settimane dal <b>denaro libero del conto di appoggio</b>. Il denaro resta dov'è (nessun bonifico finché non lo fai): serve a non allocarlo altrove. Ogni lunedì ti propone <b>un solo bonifico</b>, quello della settimana che comincia.</div>
+          ${select('weeks', 'Settimane in anticipo', [['0', 'Nessuna'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']], String(b.advanceWeeks ?? 0))}
+          ${select('src', 'Conto di appoggio', others, b.sourceAccountId ?? others[0][0], { hint: 'Di solito il conto dove arrivano gli incassi.' })}`,
+        onSubmit: async (v) => {
+          await api.commit((s, c) => C.setBudgetAdvance(s, c, { weeks: Number(v.weeks), sourceAccountId: Number(v.weeks) > 0 ? v.src : null }));
+          const r = await api.commit((s, c) => C.runBudgetFunding(s, c, { force: true }));
+          api.toast(r.shortfall > 0 ? `Riservati ${formatEuro(r.funded)} · mancano ${formatEuro(r.shortfall)}` : r.funded > 0 ? `Riservati altri ${formatEuro(r.funded)}` : 'Salvato');
+        },
+      });
+    },
     'budget-fund-off': () => confirmSheet({ title: 'Disattiva il finanziamento', text: 'Il denaro riservato per il budget torna libero e il budget resta un semplice tetto di spesa.', label: 'Disattiva', run: async () => { await api.commit((s, c) => C.disableBudgetFund(s, c)); } }),
     'edit-budget': budgetSheet, 'edit-tax': taxSheet, 'edit-lock': lockSheet, 'change-password': passwordSheet,
     'new-reconciliation': reconciliationSheet,

@@ -843,7 +843,7 @@ export function disableBudgetFund(state, ctx) {
     const f = find(s.funds, b.fundId, 'Fondo budget');
     releaseAll(s, ctx, f, log, 'budget disattivato');
     const fb = copy(f), bb = copy(b);
-    f.archived = true; b.fundId = null; b.accountId = null; b.lastFundedWeek = null;
+    f.archived = true; b.fundId = null; b.accountId = null; b.lastFundedWeek = null; b.advanceWeeks = 0; b.sourceAccountId = null;
     log('archive', 'fund', f.id, fb, copy(f), 'Finanziamento del budget disattivato');
     log('update', 'budget', 'budget', bb, copy(b));
   });
@@ -857,7 +857,7 @@ export function disableBudgetFund(state, ctx) {
 export function runBudgetFunding(state, ctx, { force = false } = {}) {
   return mutate(state, ctx, (s, log) => {
     const b = s.settings.budget;
-    const res = { level: 0, funded: 0, released: 0, shortfall: 0, skipped: null };
+    const res = { level: 0, funded: 0, released: 0, shortfall: 0, skipped: null, advanceWeeks: b.advanceWeeks ?? 0 };
     if (!b.fundId || !b.accountId || b.weeklyCents <= 0) { res.skipped = 'non_attivo'; return res; }
     const acc = find(s.accounts, b.accountId, 'Conto spese');
     const f = find(s.funds, b.fundId, 'Fondo budget');
@@ -865,25 +865,59 @@ export function runBudgetFunding(state, ctx, { force = false } = {}) {
     if (!force && b.lastFundedWeek && b.lastFundedWeek >= wk) { res.skipped = 'gia_fatto'; return res; }
     if (acc.balanceUnknown) { res.skipped = 'saldo_da_aggiornare'; return res; }
     if (ctx.today < b.startDate) { res.skipped = 'non_iniziato'; return res; }
-    const target = budgetTargetLevel(s, ctx.today);
+    const adv = b.advanceWeeks ?? 0;
+    const src = adv > 0 && b.sourceAccountId ? s.accounts.find((a) => a.id === b.sourceAccountId && !a.archived) : null;
+    const cur = budgetTargetLevel(s, ctx.today);                 // settimana corrente (con riporto) → sul conto spese
+    const target = cur + (src ? adv * b.weeklyCents : 0);        // + settimane in anticipo → sul conto di appoggio
     const snap = snapshot(s);
-    const have = snap.funds[f.id].byAccount[acc.id] ?? 0;
+    const by = snap.funds[f.id].byAccount;
+    const haveAcc = by[acc.id] ?? 0;
+    const others = Object.entries(by).filter(([id, c]) => id !== acc.id && c > 0);
+    const haveOther = others.reduce((t, [, c]) => t + c, 0);
+    const total = haveAcc + haveOther;
     res.level = target;
-    if (have < target) {
-      const give = Math.min(target - have, Math.max(0, snap.freeByAccount[acc.id]));
-      if (give > 0) {
-        const al = pushAllocation(s, ctx, f.id, give, 'assign', 'Finanziamento settimanale del budget', null, acc.id);
-        log('allocate', 'allocation', al.id, null, al, `Budget della settimana finanziato: ${formatEuro(give)} (livello dovuto ${formatEuro(target)})`);
+    if (total < target) {
+      let deficit = target - total, given = 0;
+      const give = (account, max, why) => {
+        const g = Math.min(deficit, max, Math.max(0, snap.freeByAccount[account.id]));
+        if (g > 0) {
+          const al = pushAllocation(s, ctx, f.id, g, 'assign', 'Finanziamento del budget', null, account.id);
+          log('allocate', 'allocation', al.id, null, al, `${why}: ${formatEuro(g)} da ${account.name} (livello dovuto ${formatEuro(target)})`);
+          deficit -= g; given += g; snap.freeByAccount[account.id] -= g;
+        }
+      };
+      give(acc, Math.max(0, cur - haveAcc), 'Budget della settimana finanziato');
+      if (src && !src.balanceUnknown && deficit > 0) give(src, deficit, 'Settimane future finanziate');
+      res.funded = given; res.shortfall = deficit;
+    } else if (total > target) {
+      let out = total - target;                                  // avanzo non riportato (o budget ridotto): torna libero
+      const order = [...others.map(([id, c]) => [id, c]), [acc.id, haveAcc]];
+      for (const [id, c] of order) {
+        const r = Math.min(out, c); if (r <= 0) continue;
+        const al = pushAllocation(s, ctx, f.id, -r, 'release', 'Budget: eccedenza rilasciata', null, id);
+        log('release', 'allocation', al.id, null, al, `Eccedenza del budget rilasciata: ${formatEuro(r)}`);
+        out -= r; res.released += r;
       }
-      res.funded = give; res.shortfall = target - have - give;
-    } else if (have > target) {
-      const out = have - target;                       // avanzo non riportato (o budget ridotto): torna libero
-      const al = pushAllocation(s, ctx, f.id, -out, 'release', 'Budget: eccedenza rilasciata', null, acc.id);
-      log('release', 'allocation', al.id, null, al, `Eccedenza del budget rilasciata: ${formatEuro(out)}`);
-      res.released = out;
     }
     if (!force || !b.lastFundedWeek || b.lastFundedWeek < wk) { const bb = copy(b); b.lastFundedWeek = wk; log('update', 'budget', 'budget', bb, copy(b), `Settimana del ${wk} finanziata`); }
     return res;
+  });
+}
+/** Finanzia in anticipo da 0 a 4 settimane future usando il denaro libero di un conto di appoggio (virtuale finché non confermi il bonifico). */
+export function setBudgetAdvance(state, ctx, { weeks, sourceAccountId = null }) {
+  return mutate(state, ctx, (s, log) => {
+    const b = s.settings.budget;
+    req(b.fundId, 'non_attivo', 'Attiva prima il finanziamento del budget');
+    req(Number.isInteger(weeks) && weeks >= 0 && weeks <= 4, 'settimane', 'Scegli da 0 a 4 settimane');
+    const before = copy(b);
+    if (weeks > 0) {
+      const src = find(s.accounts, sourceAccountId, 'Conto di appoggio');
+      req(!src.archived && src.type !== 'investment', 'conto_non_valido', 'Scegli un conto liquido');
+      req(src.id !== b.accountId, 'conto_non_valido', 'Il conto di appoggio deve essere diverso dal conto spese');
+      b.sourceAccountId = src.id;
+    } else b.sourceAccountId = b.sourceAccountId ?? null;
+    b.advanceWeeks = weeks;
+    log('update', 'budget', 'budget', before, copy(b), weeks ? `Finanziamento anticipato: ${weeks} settimane` : 'Finanziamento anticipato disattivato');
   });
 }
 
