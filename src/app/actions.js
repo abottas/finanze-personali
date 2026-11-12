@@ -339,13 +339,14 @@ export function createActions(api) {
         ${select('lead', 'Bonifico con anticipo di', [['0', 'Nessun anticipo'], ['1', '1 giorno'], ['2', '2 giorni'], ['3', '3 giorni'], ['5', '5 giorni'], ['7', '7 giorni']], String(p?.leadDays ?? 0), { hint: 'Quanti giorni prima della scadenza i soldi devono essere sul conto di pagamento (es. PAC con addebito il 2: 2 giorni).' })}
         ${investOpts().length ? html`${select('toAccount', 'Versamento su (tasca di investimento)', [['', 'Nessuno: è una spesa o un pagamento'], ...investOpts()], p?.toAccountId ?? '', { hint: 'Es. PAC: i soldi passano dalla tasca Tasse alla tasca PAC (trasferimento interno, non una spesa).' })}
           <label class="check"><input type="checkbox" name="autoExecute" ${p?.autoExecute ? raw('checked') : ''}><span>Esegui <b>automaticamente</b> alla scadenza (solo se c'è denaro libero sufficiente nella tasca di origine)</span></label>` : ''}
+        ${p ? select('account', 'Conto da cui paghi', accs, p.accountId, { hint: 'Il conto dove i soldi devono trovarsi al momento del pagamento. Se è diverso da quello di accantonamento compare il bonifico da fare.' }) : ''}
         ${p ? '' : html`${select('account', 'Conto da cui paghi', accs, accs[0]?.[0])}
           ${select('fundMode', 'Copertura', [['none', 'Nessun fondo (pesa sul libero)'], ['new', 'Crea un fondo dedicato'], ...(funds.length ? [['existing', 'Usa un fondo esistente']] : [])], 'none')}
           ${funds.length ? select('fund', 'Fondo esistente', funds, funds[0][0]) : ''}`}
         ${p ? html`<button type="button" class="btn danger block" data-action="cancel-planned" data-id="${p.id}">Elimina scadenza</button>` : ''}`,
       onSubmit: async (v) => {
         const common = { name: v.name, cents: money(v.amount), dueDate: v.due, priority: Number(v.priority), categoryId: v.category, autoPay: v.autoPay === 'on', remindDays: Number(v.remind), recurrence: v.recurrence, fundingAccountId: v.funding || null, leadDays: Number(v.lead), toAccountId: v.toAccount || null, autoExecute: v.autoExecute === 'on' };
-        if (p) await api.commit((s, c) => C.updatePlanned(s, c, p.id, { ...common }));
+        if (p) await api.commit((s, c) => C.updatePlanned(s, c, p.id, { ...common, accountId: v.account }));
         else await api.commit((s, c) => C.addPlanned(s, c, { ...common, kind: v.kind, accountId: v.account, fundMode: v.fundMode, fundId: v.fund || null }));
       },
     });

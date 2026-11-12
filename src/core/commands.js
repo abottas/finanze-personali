@@ -569,6 +569,13 @@ export function updatePlanned(state, ctx, id, patch) {
     if (patch.recurrence !== undefined) p.recurrence = patch.recurrence;
     if (patch.toAccountId !== undefined) p.toAccountId = patch.toAccountId || null;
     if (patch.autoExecute !== undefined) p.autoExecute = !!patch.autoExecute && !!p.toAccountId;
+    if (patch.accountId !== undefined && patch.accountId !== p.accountId) {   // cambia il conto da cui si paga: il fondo della voce lo segue
+      const na = find(s.accounts, patch.accountId, 'Conto di pagamento');
+      req(!na.archived && na.type !== 'investment', 'conto_non_valido', 'Scegli un conto liquido');
+      const pf = p.fundId ? s.funds.find((x) => x.id === p.fundId && x.kind === 'planned' && x.plannedId === p.id) : null;
+      if (pf) { const fb = copy(pf); pf.accountId = na.id; log('update', 'fund', pf.id, fb, copy(pf), 'Conto di pagamento della scadenza cambiato'); }
+      p.accountId = na.id;
+    }
     if (patch.fundingAccountId !== undefined) { if (patch.fundingAccountId) find(s.accounts, patch.fundingAccountId, 'Conto di accantonamento'); p.fundingAccountId = patch.fundingAccountId || null; }
     if (patch.leadDays !== undefined) { req(Number.isInteger(patch.leadDays) && patch.leadDays >= 0 && patch.leadDays <= 14, 'giorni', 'Giorni di anticipo da 0 a 14'); p.leadDays = patch.leadDays; }
     if (!p.toAccountId) p.autoExecute = false;

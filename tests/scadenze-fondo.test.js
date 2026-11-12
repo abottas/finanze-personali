@@ -77,3 +77,14 @@ test('voce ricorrente: dopo il pagamento la successiva viene finanziata al giro 
   assert.equal(fundOf(t.s(), p).archived, false);
   assert.deepEqual(validateState(t.s()), []);
 });
+
+test('cambiare il conto di pagamento: il fondo della voce lo segue e il bonifico da fare sparisce se coincide con l\'accantonamento', async () => {
+  const t = await setup();
+  const p = await t.add({ name: 'Abbigliamento', kind: 'purchase', toAccountId: null, autoExecute: false, recurrence: 'none', categoryId: 'cat_shop', accountId: t.trd, fundingAccountId: t.bb, cents: 15000 });
+  t.set((await C.runPlannedFunding(t.s(), ctx())).state);
+  assert.equal(pendingTransfers(t.s(), snapshot(t.s())).length, 1);                  // BBVA → conto di pagamento
+  t.set((await C.updatePlanned(t.s(), ctx(), p, { accountId: t.bb })).state);
+  assert.equal(fundOf(t.s(), p).accountId, t.bb);
+  assert.equal(pendingTransfers(t.s(), snapshot(t.s())).length, 0);                  // paga da BBVA: nessun bonifico
+  assert.deepEqual(validateState(t.s()), []);
+});
