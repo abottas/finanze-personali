@@ -181,6 +181,9 @@ export function validateState(st) {
     if (!isId(r.id) || !Number.isInteger(r.bp) || r.bp < 0 || r.bp > 10000) bad('regola fiscale: aliquota non valida');
     if (!has('funds', r.fundId)) bad('regola fiscale: fondo inesistente');
   }
+  const pf = s.plannedFunding;
+  if (!pf || typeof pf.enabled !== 'boolean' || !Number.isInteger(pf.horizonDays) || pf.horizonDays < 7 || pf.horizonDays > 120) bad('impostazioni: finanziamento delle scadenze non valido');
+  else if (pf.sourceAccountId != null && !has('accounts', pf.sourceAccountId)) bad('finanziamento scadenze: conto inesistente');
   const tp = s.taxProfile;
   if (!tp || ![tp.coefficientBp, tp.inpsBp, tp.taxBp].every((x) => Number.isInteger(x) && x >= 0 && x <= 10000)) bad('profilo fiscale: aliquote non valide');
   else {

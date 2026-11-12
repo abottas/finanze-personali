@@ -66,6 +66,16 @@ await g.waitForFunction(() => /Settimane finanziate in anticipo\s*2/.test(docume
 await g.click('button[data-action=budget-advance]'); await g.waitForSelector('.sheet'); await g.selectOption('.sheet select[name=weeks]', '0');
 await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' });
 await g.evaluate(() => { location.hash = '#/overview'; }); await g.waitForTimeout(300);
+step('SCADENZE finanziate in anticipo: attivazione, riserva, stato di copertura in Pianificazione');
+await g.evaluate(() => { location.hash = '#/settings/budget'; }); await g.waitForSelector('button[data-action=planned-funding]');
+await g.click('button[data-action=planned-funding]'); await g.waitForSelector('.sheet');
+await g.check('.sheet input[name=enabled]'); await g.selectOption('.sheet select[name=horizon]', '60');
+await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' }); await g.waitForTimeout(400);
+await g.waitForFunction(() => /Scadenze finanziate in anticipo\s*attivo/i.test(document.body.textContent)); await gshot('41c-scadenze-finanziate');
+await g.evaluate(() => { location.hash = '#/plan'; }); await g.waitForTimeout(400);
+const planTxt = await g.textContent('.screen');
+assert.ok(/Coperta sul conto|bonifico da fare|Da finanziare/.test(planTxt), 'stato di copertura delle scadenze'); await gshot('41d-pianificazione-copertura');
+await g.evaluate(() => { location.hash = '#/overview'; }); await g.waitForTimeout(300);
 step('Trade Republic raggruppata in due tasche (Tasse + PAC): il PAC non è liquidità');
 const mapTxt = await g.textContent('.screen');
 assert.match(mapTxt, /2 tasche/); assert.match(mapTxt, /Investito · non è liquidità/); assert.match(mapTxt, /Riserva fiscale \(liquidità\)/);

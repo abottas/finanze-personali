@@ -48,6 +48,7 @@ export function defaultSettings(today) {
     budget: { weeklyCents: 0, startDate: today, carryOver: true, carryDeficit: true, accountId: null, fundId: null, lastFundedWeek: null, advanceWeeks: 0, sourceAccountId: null },
     taxRules: [],
     taxProfile: defaultTaxProfile(),
+    plannedFunding: { enabled: false, horizonDays: 30, sourceAccountId: null, lastRunDate: null },
   };
 }
 
@@ -92,6 +93,8 @@ export function migrateState(st) {
   st.invoiceTemplates ??= [];
   st.settings ??= {};
   st.settings.taxProfile ??= defaultTaxProfile();
+  st.settings.plannedFunding ??= { enabled: false, horizonDays: 30, sourceAccountId: null, lastRunDate: null };
+  for (const p of st.planned ?? []) { p.fundingAccountId ??= null; p.leadDays ??= 0; }
   for (const c of st.categories ?? []) { c.icon ??= catDefaults[c.id]?.icon ?? '🏷️'; c.color ??= catDefaults[c.id]?.color ?? 'gray'; c.parentId ??= catDefaults[c.id]?.parentId ?? null; }
   for (const id of Object.keys(catDefaults)) if (!(st.categories ?? []).some((c) => c.id === id)) st.categories.push(structuredClone(catDefaults[id]));
   for (const a of st.accounts ?? []) { a.bank ??= null; a.color ??= null; a.emoji ??= null; a.logo ??= null; a.role ??= null; a.balanceUnknown ??= false; a.origin ??= null; }

@@ -320,3 +320,5 @@ button.item:active { opacity: .6; }
 .chart .l-free { fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: none; }
 .chart .area { fill: var(--accent-soft); opacity: .6; stroke: none; }
 .kv .strong { font-weight: 700; color: var(--text); }
+.s.warn-t, .warn-t { color: var(--warn-text, #b45309); } .s.pos { color: var(--pos); }
+@media (prefers-color-scheme: dark) { .s.warn-t, .warn-t { color: #fbbf24; } }

@@ -335,6 +335,8 @@ export function createActions(api) {
         ${select('remind', 'Avviso (nel Calendario)', REMIND, String(p?.remindDays ?? 2))}
         <label class="check"><input type="checkbox" name="autoPay" ${p?.autoPay ? raw('checked') : ''}><span>Addebito automatico (devo solo verificarlo)</span></label>
         ${select('priority', 'Priorità', PRIORITY, String(p?.priority ?? 2))}
+        ${select('funding', 'Accantona dal conto', [['', 'Predefinito (impostazioni del budget)'], ...accOpts()], p?.fundingAccountId ?? '', { hint: 'Da quale conto riservare in anticipo i soldi di questa voce (es. BBVA per i viaggi e le scadenze).' })}
+        ${select('lead', 'Bonifico con anticipo di', [['0', 'Nessun anticipo'], ['1', '1 giorno'], ['2', '2 giorni'], ['3', '3 giorni'], ['5', '5 giorni'], ['7', '7 giorni']], String(p?.leadDays ?? 0), { hint: 'Quanti giorni prima della scadenza i soldi devono essere sul conto di pagamento (es. PAC con addebito il 2: 2 giorni).' })}
         ${investOpts().length ? html`${select('toAccount', 'Versamento su (tasca di investimento)', [['', 'Nessuno: è una spesa o un pagamento'], ...investOpts()], p?.toAccountId ?? '', { hint: 'Es. PAC: i soldi passano dalla tasca Tasse alla tasca PAC (trasferimento interno, non una spesa).' })}
           <label class="check"><input type="checkbox" name="autoExecute" ${p?.autoExecute ? raw('checked') : ''}><span>Esegui <b>automaticamente</b> alla scadenza (solo se c'è denaro libero sufficiente nella tasca di origine)</span></label>` : ''}
         ${p ? '' : html`${select('account', 'Conto da cui paghi', accs, accs[0]?.[0])}
@@ -342,7 +344,7 @@ export function createActions(api) {
           ${funds.length ? select('fund', 'Fondo esistente', funds, funds[0][0]) : ''}`}
         ${p ? html`<button type="button" class="btn danger block" data-action="cancel-planned" data-id="${p.id}">Elimina scadenza</button>` : ''}`,
       onSubmit: async (v) => {
-        const common = { name: v.name, cents: money(v.amount), dueDate: v.due, priority: Number(v.priority), categoryId: v.category, autoPay: v.autoPay === 'on', remindDays: Number(v.remind), recurrence: v.recurrence, toAccountId: v.toAccount || null, autoExecute: v.autoExecute === 'on' };
+        const common = { name: v.name, cents: money(v.amount), dueDate: v.due, priority: Number(v.priority), categoryId: v.category, autoPay: v.autoPay === 'on', remindDays: Number(v.remind), recurrence: v.recurrence, fundingAccountId: v.funding || null, leadDays: Number(v.lead), toAccountId: v.toAccount || null, autoExecute: v.autoExecute === 'on' };
         if (p) await api.commit((s, c) => C.updatePlanned(s, c, p.id, { ...common }));
         else await api.commit((s, c) => C.addPlanned(s, c, { ...common, kind: v.kind, accountId: v.account, fundMode: v.fundMode, fundId: v.fund || null }));
       },
@@ -624,6 +626,11 @@ export function createActions(api) {
       },
     });
   }
+  async function runPlannedNow() {
+    const r = await api.commit((s, c) => C.runPlannedFunding(s, c, { force: true }));
+    const sh = r.shortfalls ?? [];
+    api.toast(sh.length ? `Riservati ${formatEuro(r.funded)} · non coperto: ${sh.map((x) => `${x.name} (${formatEuro(x.cents)})`).join(', ')}` : r.funded > 0 ? `Scadenze finanziate: ${formatEuro(r.funded)}` : 'Tutte le scadenze sono già coperte');
+  }
   function icsSheet() {
     api.openSheet({
       title: 'Esporta nel Calendario', submit: 'Crea file calendario',
@@ -753,6 +760,21 @@ export function createActions(api) {
       const r = await api.commit((s, c) => C.runBudgetFunding(s, c, { force: true }));
       api.toast(r.skipped === 'saldo_da_aggiornare' ? 'Aggiorna prima il saldo del conto spese' : r.funded > 0 ? `Riservati altri ${formatEuro(r.funded)}${r.shortfall > 0 ? ` · mancano ancora ${formatEuro(r.shortfall)}` : ''}` : r.shortfall > 0 ? `Nessun denaro libero: mancano ${formatEuro(r.shortfall)}` : 'Il budget è già finanziato');
     },
+    'planned-funding': () => {
+      const pf = st().settings.plannedFunding;
+      api.openSheet({
+        title: 'Scadenze finanziate in anticipo', submit: 'Salva',
+        body: html`<label class="check"><input type="checkbox" name="enabled" ${pf.enabled ? raw('checked') : ''}><span>Riserva in anticipo il denaro delle scadenze</span></label>
+          ${select('horizon', 'Quanto in anticipo', [['15', '15 giorni'], ['30', '30 giorni'], ['45', '45 giorni'], ['60', '60 giorni'], ['90', '90 giorni']], String(pf.horizonDays))}
+          ${select('src', 'Conto predefinito da cui accantonare', [['', 'Il conto di pagamento di ogni voce'], ...accOpts()], pf.sourceAccountId ?? '', { hint: 'Ogni voce può avere un conto diverso: lo scegli nella singola scadenza.' })}
+          <div class="note">Il denaro resta dov'è: è un vincolo. Se il conto da cui accantoni è diverso da quello di pagamento compare il <b>bonifico da confermare</b>: appena lo confermi, la somma è sul conto di pagamento ma resta <b>riservata</b> a quella scadenza (non diventa liberamente spendibile). Per i versamenti automatici (PAC) l'addebito viene registrato da solo alla scadenza <b>solo se il denaro è arrivato</b>.</div>`,
+        onSubmit: async (v) => {
+          await api.commit((s, c) => C.setPlannedFunding(s, c, { enabled: v.enabled === 'on', horizonDays: Number(v.horizon), sourceAccountId: v.src || null }));
+          if (v.enabled === 'on') await runPlannedNow();
+        },
+      });
+    },
+    'planned-funding-now': () => runPlannedNow(),
     'budget-advance': () => {
       const b = st().settings.budget;
       const others = accOpts().filter(([id]) => id !== b.accountId);

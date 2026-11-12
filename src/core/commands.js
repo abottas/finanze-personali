@@ -530,13 +530,15 @@ export function closeReceivable(state, ctx, id, note = '') {
 }
 
 // ───────────────────── Acquisti programmati / spese straordinarie ─────────────────────
-export function addPlanned(state, ctx, { name, kind = 'purchase', cents, dueDate, priority = 2, accountId, fundMode = 'new', fundId = null, recurrence = 'none', categoryId = 'cat_other', autoPay = false, remindDays = 2, confirm = null, origin = null, toAccountId = null, autoExecute = false }) {
+export function addPlanned(state, ctx, { name, kind = 'purchase', cents, dueDate, priority = 2, accountId, fundMode = 'new', fundId = null, recurrence = 'none', categoryId = 'cat_other', autoPay = false, remindDays = 2, confirm = null, origin = null, toAccountId = null, autoExecute = false, fundingAccountId = null, leadDays = 0 }) {
   return mutate(state, ctx, (s, log) => {
     find(s.accounts, accountId, 'Conto');
+    if (fundingAccountId) find(s.accounts, fundingAccountId, 'Conto di accantonamento');
+    req(Number.isInteger(leadDays) && leadDays >= 0 && leadDays <= 14, 'giorni', 'Giorni di anticipo da 0 a 14');
     assertCents(cents);
     req(cents > 0, 'importo', 'L\'importo deve essere positivo');
     req(isDate(dueDate), 'data_non_valida', 'Data non valida');
-    const p = { id: ctx.newId(), name: needName(name), kind, cents, dueDate, anchorDay: Number(dueDate.slice(8)), priority, accountId, fundId: null, recurrence, status: 'planned', createdAt: ctx.nowIso, categoryId, autoPay: !!autoPay, remindDays, confirm, origin, toAccountId, autoExecute: !!autoExecute && !!toAccountId };
+    const p = { id: ctx.newId(), name: needName(name), kind, cents, dueDate, anchorDay: Number(dueDate.slice(8)), priority, accountId, fundId: null, recurrence, status: 'planned', createdAt: ctx.nowIso, categoryId, autoPay: !!autoPay, remindDays, confirm, origin, toAccountId, autoExecute: !!autoExecute && !!toAccountId, fundingAccountId: fundingAccountId || null, leadDays };
     if (fundMode === 'new') {
       const f = { id: ctx.newId(), name: `Per: ${p.name}`.slice(0, 80), kind: 'planned', accountId, goal: null, plannedId: p.id, archived: false, createdAt: ctx.nowIso, color: 'purple', icon: '🛍️', parentId: null, provisional: false, origin: null };
       s.funds.push(f);
@@ -567,6 +569,8 @@ export function updatePlanned(state, ctx, id, patch) {
     if (patch.recurrence !== undefined) p.recurrence = patch.recurrence;
     if (patch.toAccountId !== undefined) p.toAccountId = patch.toAccountId || null;
     if (patch.autoExecute !== undefined) p.autoExecute = !!patch.autoExecute && !!p.toAccountId;
+    if (patch.fundingAccountId !== undefined) { if (patch.fundingAccountId) find(s.accounts, patch.fundingAccountId, 'Conto di accantonamento'); p.fundingAccountId = patch.fundingAccountId || null; }
+    if (patch.leadDays !== undefined) { req(Number.isInteger(patch.leadDays) && patch.leadDays >= 0 && patch.leadDays <= 14, 'giorni', 'Giorni di anticipo da 0 a 14'); p.leadDays = patch.leadDays; }
     if (!p.toAccountId) p.autoExecute = false;
     log('update', 'planned', id, before, copy(p));
   });
@@ -605,6 +609,11 @@ export function completePlanned(state, ctx, { id, date = ctx.today, cents, accou
       req(to.type === 'investment', 'destinazione', 'La destinazione non è un conto di investimento');
       req(isDate(date) && date <= ctx.today, 'data_non_valida', 'Data non valida o futura');
       req(date >= from.openingDate && date >= to.openingDate, 'data_prima_apertura', 'La data precede il saldo iniziale di un conto');
+      const pf0 = p.fundId ? s.funds.find((x) => x.id === p.fundId && x.kind === 'planned') : null;
+      if (pf0) {                                           // la riserva destinata a questa scadenza viene consumata dal versamento
+        const r = Math.min(snapshot(s).funds[pf0.id].byAccount[from.id] ?? 0, amount);
+        if (r > 0) { const al = pushAllocation(s, ctx, pf0.id, -r, 'release', `Versamento eseguito: ${p.name}`, null, from.id); log('release', 'allocation', al.id, null, al, 'Riserva della scadenza consumata dal versamento'); }
+      }
       const t = { id: ctx.newId(), fromAccountId: from.id, toAccountId: to.id, cents: amount, date, note: cleanNote(p.name), purpose: 'investment', fundId: null, plannedId: p.id, status: 'posted', voidReason: null, createdAt: ctx.nowIso };
       s.transfers.push(t);
       doneId = t.id;
@@ -641,8 +650,9 @@ export async function runAutoPlanned(state, ctx) {
     for (let guard = 0; guard < 36; guard++) {
       const p = cur.planned.find((x) => x.id === p0.id);
       if (!p || p.status !== 'planned' || !p.autoExecute || !p.toAccountId || p.confirm || p.dueDate > ctx.today) break;
-      const free = snapshot(cur).freeByAccount[p.accountId];
-      if (free < p.cents) break;                          // niente denaro libero sufficiente: resta da confermare
+      const sn = snapshot(cur);
+      const reserved = p.fundId ? sn.funds[p.fundId]?.byAccount[p.accountId] ?? 0 : 0;   // denaro già RISERVATO a questa scadenza e arrivato sul conto (bonifico confermato)
+      if (sn.freeByAccount[p.accountId] + Math.max(0, reserved) < p.cents) break;       // non c'è ancora: resta da confermare
       const from = cur.accounts.find((a) => a.id === p.accountId), to = cur.accounts.find((a) => a.id === p.toAccountId);
       const date = p.dueDate >= from.openingDate && p.dueDate >= to.openingDate ? p.dueDate : ctx.today;
       cur = (await completePlanned(cur, ctx, { id: p.id, date, auto: true })).state;
@@ -650,6 +660,61 @@ export async function runAutoPlanned(state, ctx) {
     }
   }
   return { state: cur, result: done };
+}
+
+
+/** Impostazioni del finanziamento anticipato delle scadenze. */
+export function setPlannedFunding(state, ctx, { enabled, horizonDays, sourceAccountId }) {
+  return mutate(state, ctx, (s, log) => {
+    const before = copy(s.settings.plannedFunding);
+    const pf = s.settings.plannedFunding;
+    if (enabled !== undefined) pf.enabled = !!enabled;
+    if (horizonDays !== undefined) { req(Number.isInteger(horizonDays) && horizonDays >= 7 && horizonDays <= 120, 'orizzonte', 'Orizzonte da 7 a 120 giorni'); pf.horizonDays = horizonDays; }
+    if (sourceAccountId !== undefined) { if (sourceAccountId) { const a = find(s.accounts, sourceAccountId, 'Conto'); req(a.type !== 'investment', 'conto_non_valido', 'Scegli un conto liquido'); } pf.sourceAccountId = sourceAccountId || null; }
+    pf.lastRunDate = null;
+    log('update', 'settings', 'plannedFunding', before, copy(pf), pf.enabled ? 'Finanziamento anticipato delle scadenze' : 'Finanziamento anticipato delle scadenze disattivato');
+  });
+}
+/**
+ * Riserva in anticipo il denaro delle scadenze dei prossimi `horizonDays` giorni, in ordine di data, dal conto scelto per ogni voce
+ * (altrimenti dal conto predefinito, altrimenti dal conto di pagamento). Crea da solo il fondo di ogni scadenza.
+ * Il denaro riservato su un conto diverso da quello di pagamento diventa un "bonifico da confermare". Mai oltre il libero.
+ * @returns result {funded, created, shortfalls:[{plannedId,name,cents,dueDate,reason}], skipped}
+ */
+export function runPlannedFunding(state, ctx, { force = false } = {}) {
+  return mutate(state, ctx, (s, log) => {
+    const pf = s.settings.plannedFunding;
+    const res = { funded: 0, created: 0, shortfalls: [], skipped: null };
+    if (!pf.enabled) { res.skipped = 'non_attivo'; return res; }
+    if (!force && pf.lastRunDate === ctx.today) { res.skipped = 'gia_fatto'; return res; }
+    const horizon = addDays(ctx.today, pf.horizonDays);
+    const items = s.planned.filter((p) => p.status === 'planned' && !p.confirm && p.dueDate <= horizon).sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : a.priority - b.priority));
+    let snap = snapshot(s);
+    for (const p of items) {
+      let f = p.fundId ? s.funds.find((x) => x.id === p.fundId) : null;
+      if (f && f.kind !== 'planned') continue;             // coperta da un fondo scelto da te (obiettivo): non lo tocco
+      if (!f) {
+        f = { id: ctx.newId(), name: `Per: ${p.name}`.slice(0, 80), kind: 'planned', accountId: p.accountId, goal: null, plannedId: p.id, archived: false, createdAt: ctx.nowIso, color: 'purple', icon: '🛍️', parentId: null, provisional: false, origin: null, refillFundId: null };
+        s.funds.push(f); p.fundId = f.id; res.created++;
+        log('create', 'fund', f.id, null, f, 'Fondo creato per il finanziamento anticipato della scadenza');
+        snap = snapshot(s);
+      }
+      const need = Math.max(0, p.cents - (snap.funds[f.id]?.available ?? 0));
+      if (need === 0) continue;
+      const srcId = p.fundingAccountId ?? pf.sourceAccountId ?? p.accountId;
+      const src = s.accounts.find((a) => a.id === srcId && !a.archived);
+      if (!src || src.balanceUnknown) { res.shortfalls.push({ plannedId: p.id, name: p.name, cents: need, dueDate: p.dueDate, reason: src ? 'saldo_da_aggiornare' : 'conto_mancante' }); continue; }
+      const g = Math.min(need, Math.max(0, snap.freeByAccount[src.id]));
+      if (g > 0) {
+        const al = pushAllocation(s, ctx, f.id, g, 'assign', 'Scadenza finanziata in anticipo', null, src.id);
+        log('allocate', 'allocation', al.id, null, al, `Scadenza "${p.name}" (${p.dueDate}) finanziata: ${formatEuro(g)} da ${src.name}`);
+        snap.freeByAccount[src.id] -= g; snap.funds[f.id].available += g; res.funded += g;
+      }
+      if (need - g > 0) res.shortfalls.push({ plannedId: p.id, name: p.name, cents: need - g, dueDate: p.dueDate, reason: 'libero_insufficiente' });
+    }
+    if (pf.lastRunDate !== ctx.today) { const b = copy(pf); pf.lastRunDate = ctx.today; log('update', 'settings', 'plannedFunding', b, copy(pf), 'Scadenze finanziate'); }
+    return res;
+  });
 }
 
 // ───────────────────────── Impostazioni ─────────────────────────

@@ -15,7 +15,7 @@ import { today as todayLocal } from '../core/dates.js';
 import { AppError } from '../core/errors.js';
 import * as C from '../core/commands.js';
 
-const VERSION = '0.11.0';
+const VERSION = '0.12.0';
 const $ = (s) => document.querySelector(s);
 const root = $('#app'), sheetRoot = $('#sheet-root'), toastEl = $('#toast'), cover = $('#cover');
 
@@ -190,6 +190,15 @@ async function afterUnlock(state, { recovered = false } = {}) {
     try {
       const r = await commit(async (s, c) => { const o = await C.runBudgetFunding(s, c); return o.result.skipped ? { state: s, result: o.result } : o; });
       if (r.funded > 0) toast(r.shortfall > 0 ? `Budget finanziato ${(r.funded / 100).toLocaleString('it-IT')} € · mancano ${(r.shortfall / 100).toLocaleString('it-IT')} €` : 'Budget della settimana finanziato');
+    } catch (e) { console.error(e); }
+  }
+  // Scadenze finanziate in anticipo (una volta al giorno, all'apertura).
+  if (state.settings.plannedFunding.enabled) {
+    try {
+      const r = await commit(async (s, c) => { const o = await C.runPlannedFunding(s, c); return o.result.skipped ? { state: s, result: o.result } : o; });
+      const sh = r.shortfalls ?? [];
+      if (sh.length) toast(`Scadenze non coperte: ${sh.map((x) => x.name).slice(0, 3).join(', ')}${sh.length > 3 ? '…' : ''}`, true);
+      else if (r.funded > 0) toast('Scadenze finanziate in anticipo');
     } catch (e) { console.error(e); }
   }
   // Versamenti interni a scadenza (es. PAC dalla tasca Tasse alla tasca PAC) configurati come automatici.

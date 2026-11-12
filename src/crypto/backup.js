@@ -40,7 +40,7 @@ export function summarize(state) {
   };
 }
 
-export async function createBackup(state, password, { iterations = KDF_ITERATIONS, now = new Date(), appVersion = '0.11.0' } = {}) {
+export async function createBackup(state, password, { iterations = KDF_ITERATIONS, now = new Date(), appVersion = '0.12.0' } = {}) {
   const problems = validateState(state);
   if (problems.length) throw new AppError('stato_non_valido', 'Impossibile creare il backup: dati non validi (' + problems[0] + ')');
   const kdf = { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: toB64(crypto.getRandomValues(new Uint8Array(16))) };
