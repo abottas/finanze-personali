@@ -196,6 +196,16 @@ await q.setInputFiles('.sheet input[name=logoFile]', 'icons/icon-192.png'); awai
 await q.click('.sheet button[type=submit]'); await q.waitForSelector('.sheet', { state: 'detached' });
 assert.ok(await q.locator('.acct .tile img').count() >= 1, 'logo mostrato');
 
+step('calcolatrice compenso');
+await q.click('.tab[data-nav=overview]').catch(() => {}); await q.waitForSelector('button[data-action=fee-calc]');
+await q.click('button[data-action=fee-calc]'); await q.waitForSelector('.sheet');
+await q.fill('.sheet input[name=amount]', '1400'); await q.waitForTimeout(150);
+assert.equal(await q.locator('[data-fee=net]').innerText(), '1.074,95 €'.replace(/ /g, '\u00a0'), 'netto su 1.400 €');
+assert.ok((await q.locator('[data-fee=inps]').innerText()).includes('284,68'));
+await q.click('.sheet label:has-text("Voglio il netto")'); await q.fill('.sheet input[name=amount]', '1000'); await q.waitForTimeout(150);
+const g = await q.locator('[data-fee=gross]').innerText(); assert.ok(/1\.3\d\d,\d\d/.test(g), 'compenso per netto 1.000: ' + g);
+await qshot('24b-calcolatrice'); await q.click('.sheet button[data-action=close-sheet] >> nth=-1'); await q.waitForSelector('.sheet', { state: 'detached' });
+
 step('analisi guadagni vs costi');
 await q.click('button[data-nav=analysis]'); await q.waitForSelector('svg.chart'); await q.waitForTimeout(400); await qshot('25-analisi');
 assert.ok(await q.locator('svg.chart').count() >= 2, 'grafici presenti');

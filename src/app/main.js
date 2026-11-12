@@ -15,7 +15,7 @@ import { today as todayLocal } from '../core/dates.js';
 import { AppError } from '../core/errors.js';
 import * as C from '../core/commands.js';
 
-const VERSION = '0.9.2';
+const VERSION = '0.10.0';
 const $ = (s) => document.querySelector(s);
 const root = $('#app'), sheetRoot = $('#sheet-root'), toastEl = $('#toast'), cover = $('#cover');
 
@@ -251,6 +251,10 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.matches('input[data-sets]')) { const f = el.closest('form'); if (f) f.dataset[el.dataset.sets] = el.value; }
   if (el.dataset.change && changes[el.dataset.change]) changes[el.dataset.change](el);
+});
+document.addEventListener('input', (e) => {   // aggiornamento "dal vivo" solo dove richiesto (data-live)
+  const el = e.target;
+  if (el.dataset?.live != null && el.dataset.change && changes[el.dataset.change]) changes[el.dataset.change](el);
 });
 document.addEventListener('submit', async (e) => {
   const form = e.target.closest('form[data-form]'); if (!form) return;

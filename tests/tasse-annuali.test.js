@@ -82,3 +82,17 @@ test('formula dell\'utente: 17.330 € incassati → imponibile 78%, INPS 26,07%
   s.settings.taxProfile.inpsDeduction = 'paid';
   assert.equal(estimateAnnual(s, 2026).impostaDue, 67587);   // senza versamenti nessuna deduzione
 });
+
+import { grossForNet, estimateTaxes } from '../src/core/tax.js';
+test('calcolatrice: compenso → netto; "voglio il netto" → compenso minimo che lo garantisce', () => {
+  const P = { coefficientBp: 7800, inpsBp: 2607, taxBp: 500, roundStepCents: 1000 };
+  const t = estimateTaxes(20000, P);                       // 200 €
+  assert.equal(t.base, 15600); assert.equal(t.inps, 4067);   // 156,00 · 40,67
+  assert.equal(t.netAfter, 20000 - t.total);
+  for (const net of [1, 50000, 107495, 1000000]) {
+    const g = grossForNet(net, P);
+    assert.ok(estimateTaxes(g, P).netAfter >= net, 'garantisce il netto');
+    assert.ok(estimateTaxes(g - 1, P).netAfter < net, 'è il minimo');
+  }
+  assert.equal(grossForNet(0, P), 0);
+});

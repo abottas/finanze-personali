@@ -23,6 +23,21 @@ export function estimateTaxes(netCents, profile) {
   return { base, inps, imposta, total, netAfter: netCents - total };
 }
 
+/**
+ * Compenso lordo MINIMO necessario per ottenere almeno `netTargetCents` di netto dopo INPS e imposta.
+ * Il netto cresce con il compenso, quindi basta una ricerca per bisezione (nessun calcolo in virgola mobile).
+ */
+export function grossForNet(netTargetCents, profile) {
+  if (!Number.isInteger(netTargetCents) || netTargetCents <= 0) return 0;
+  let lo = netTargetCents, hi = netTargetCents * 4 + 100;
+  while (estimateTaxes(hi, profile).netAfter < netTargetCents) hi *= 2;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (estimateTaxes(mid, profile).netAfter >= netTargetCents) hi = mid; else lo = mid + 1;
+  }
+  return lo;
+}
+
 /** Arrotonda al multiplo più vicino (default) di `step` centesimi. */
 export function roundToStep(cents, step, mode = 'nearest') {
   if (step <= 1) return cents;

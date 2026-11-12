@@ -150,6 +150,7 @@ export function viewOverview(app) {
   return html`<div class="screen">
     ${topbar('Panoramica', formatDateLong(today), html`
       <button class="icon-btn" data-action="toggle-hide" aria-label="Mostra o nascondi importi">${app.hide ? I.eyeOff : I.eye}</button>
+      <button class="icon-btn" data-action="fee-calc" aria-label="Calcolatrice compenso netto">${I.calc}</button>
       <button class="icon-btn" data-action="lock" aria-label="Blocca">${I.lock}</button>
       <button class="icon-btn" data-nav="settings" aria-label="Impostazioni">${I.gear}</button>`)}
     ${st.meta.demo ? html`<div class="banner">Dati dimostrativi · fittizi — puoi eliminarli da Impostazioni</div>` : ''}

@@ -16,6 +16,7 @@ import { formatDate, formatDateLong } from '../core/dates.js';
 import { createBackup, verifyBackup } from '../crypto/backup.js';
 import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { runIntegrityChecks } from '../core/integrity.js';
+import { estimateTaxes, grossForNet } from '../core/tax.js';
 import { statsCsv, forecastSummaryCsv, forecastDetailCsv } from '../core/reports.js';
 
 const ACC_TYPES = [['checking', 'Conto corrente'], ['savings', 'Risparmio'], ['cash', 'Contanti'], ['investment', 'Investimento (PAC) · non è liquidità'], ['other', 'Altro']];
@@ -694,6 +695,17 @@ export function createActions(api) {
       });
     },
     'tax-opening-clear': () => { api.closeSheet?.(); confirmSheet({ title: 'Rimuovere i dati iniziali?', text: 'La stima tornerà a basarsi solo sui movimenti registrati nell\'app.', label: 'Rimuovi', run: async () => { await api.commit((s, c) => C.setTaxOpening(s, c, null)); } }); },
+    'fee-calc': () => {
+      const tp = st().settings.taxProfile;
+      const rows = [['gross', 'Compenso'], ['base', `Reddito forfettario (${pctStr(tp.coefficientBp)}%)`], ['inps', `INPS Gestione Separata (${pctStr(tp.inpsBp)}%)`], ['imp', `Imposta sostitutiva (${pctStr(tp.taxBp)}% su reddito − INPS)`], ['tax', 'Totale tasse e contributi'], ['net', 'Netto in tasca'], ['pct', 'Peso delle tasse sul compenso']];
+      api.openSheet({
+        title: 'Calcolatrice compenso', submit: null, cancel: 'Chiudi',
+        body: html`<div class="seg" role="radiogroup" aria-label="Modalità"><label><input type="radio" name="mode" value="gross" checked data-change="fee-calc" data-live><span>Ho il compenso</span></label><label><input type="radio" name="mode" value="net" data-change="fee-calc" data-live><span>Voglio il netto</span></label></div>
+          <label class="field"><span id="fee-label">Compenso (€)</span><input class="money" name="amount" inputmode="decimal" autocomplete="off" placeholder="0,00" data-change="fee-calc" data-live></label>
+          <div class="card"><div class="kv">${rows.map(([k, t]) => html`<span class="k ${k === 'net' ? 'strong' : ''}">${t}</span><span class="num ${k === 'net' ? 'strong' : ''}" data-fee="${k}">—</span>`)}</div></div>
+          <div class="note">Stima con i parametri del tuo profilo fiscale (regime forfettario). Importi senza IVA. Non include marca da bollo né spese. "Voglio il netto" calcola il compenso minimo da chiedere per avere in tasca quella cifra.</div>`,
+      });
+    },
     'verify-rates': () => { const y = Number(app.today.slice(0, 4)); confirmSheet({ title: `Aliquote ${y} verificate?`, text: 'Conferma solo dopo aver controllato aliquota INPS Gestione Separata, coefficiente e imposta sostitutiva validi per l\'anno.', label: 'Le ho verificate', run: async () => { await api.commit((s, c) => C.verifyTaxRates(s, c, y)); } }); },
     'close-receivable': (el) => confirmSheet({ title: 'Chiudi con quanto incassato', text: 'La fattura diventa definitiva con il totale già incassato. La riserva accantonata fin qui resta com\'è.', label: 'Chiudi', run: async () => { await api.commit((s, c) => C.closeReceivable(s, c, el.dataset.id)); } }),
     'confirm-transfer': (el) => confirmTransferSheet({ fundId: el.dataset.fund, from: el.dataset.from, to: el.dataset.to, cents: Number(el.dataset.cents) }),
@@ -800,6 +812,17 @@ export function createActions(api) {
       const note = el.closest('form').querySelector('#amount-note'); if (!note) return;
       const cur = parseEuro(el.value); const orig = Number(el.dataset.orig);
       note.classList.toggle('on', cur != null && Number.isFinite(orig) && cur !== orig);
+    },
+    'fee-calc': (el) => {
+      const f = el.form, tp = st().settings.taxProfile, mode = f.elements.mode.value;
+      f.querySelector('#fee-label').textContent = mode === 'net' ? 'Netto che vuoi ottenere (€)' : 'Compenso (€)';
+      const v = parseEuro(f.elements.amount.value);
+      const set = (k, text) => { const n = f.querySelector(`[data-fee="${k}"]`); if (n) n.textContent = text; };
+      if (v == null || v <= 0) { for (const k of ['gross', 'base', 'inps', 'imp', 'tax', 'net', 'pct']) set(k, '—'); return; }
+      const gross = mode === 'net' ? grossForNet(v, tp) : v;
+      const t = estimateTaxes(gross, tp);
+      set('gross', formatEuro(gross)); set('base', formatEuro(t.base)); set('inps', formatEuro(t.inps)); set('imp', formatEuro(t.imposta));
+      set('tax', formatEuro(t.total)); set('net', formatEuro(t.netAfter)); set('pct', (t.total / gross * 100).toFixed(1).replace('.', ',') + '%');
     },
     'reserve-choice': (el) => { const i = el.form.elements.a0; if (i) i.value = el.dataset.amount; },
     'planned-kind': (el) => {
