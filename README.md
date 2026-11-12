@@ -65,3 +65,6 @@ Uso personale. Nessuna licenza concessa.
 - **Analisi**: indicatori medi, entrate/uscite per mese (tocca un mese per il dettaglio), liquidità a fine mese, budget settimanale, categorie nel tempo, tabella mensile; periodo 3/6/12 mesi.
 - **Pianificazione**: liquidità passata + prevista (prudente e con incassi attesi) e previsione mensile di entrate/uscite, incluse le fatture ricorrenti future (mai considerate garantite).
 - **Esporta** (CSV, separatore `;`): statistiche mensili, previsione per mese, previsione dettaglio per movimento. I file **non sono cifrati**.
+
+### Se la pubblicazione resta bloccata
+Se in **Actions** l'esecuzione "pages build and deployment" resta in coda o fallisce con errore 504, è un problema temporaneo di GitHub: rilanciala (**Re-run**) oppure fai un nuovo commit, che avvia una pubblicazione nuova. Il sito resta alla versione precedente finché non va a buon fine.
