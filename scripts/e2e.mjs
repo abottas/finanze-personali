@@ -206,6 +206,20 @@ await q.click('.sheet label:has-text("Voglio il netto")'); await q.fill('.sheet 
 const g = await q.locator('[data-fee=gross]').innerText(); assert.ok(/1\.3\d\d,\d\d/.test(g), 'compenso per netto 1.000: ' + g);
 await qshot('24b-calcolatrice'); await q.click('.sheet button[data-action=close-sheet] >> nth=-1'); await q.waitForSelector('.sheet', { state: 'detached' });
 
+step('situazione a una data');
+await q.evaluate(() => { location.hash = '#/plan'; }); await q.waitForSelector('button[data-action=open-situation]');
+await q.click('button[data-action=open-situation][data-v=dec]'); await q.waitForSelector('text=Uscite previste'); await q.waitForTimeout(300);
+const sitTxt = await q.locator('.screen').innerText();
+assert.ok(/in sintesi/i.test(sitTxt) && /mese per mese/i.test(sitTxt) && /entrate previste/i.test(sitTxt), 'sezioni della situazione');
+assert.ok(/libero a fine periodo/i.test(sitTxt)); await qshot('24c-situazione');
+await q.fill('input[name=until]', '2027-01-15'); await q.dispatchEvent('input[name=until]', 'change'); await q.waitForTimeout(300);
+assert.ok(/15 gen 2027/.test(await q.locator('.topbar').innerText()), 'data personalizzata');
+await q.click('.topbar button[data-action=export-situation]'); await q.waitForSelector('.sheet'); await q.check('.sheet input[name=ack]');
+const [dlS] = await Promise.all([q.waitForEvent('download'), q.click('.sheet button[type=submit]')]);
+const sitCsv = await (await import('node:fs/promises')).readFile(await dlS.path(), 'utf8'); assert.ok(sitCsv.startsWith('\uFEFFData;Tipo'), 'CSV situazione');
+await q.waitForSelector('.sheet', { state: 'detached' }).catch(() => {});
+await q.evaluate(() => { location.hash = '#/overview'; }); await q.waitForTimeout(200);
+
 step('analisi guadagni vs costi');
 await q.click('button[data-nav=analysis]'); await q.waitForSelector('svg.chart'); await q.waitForTimeout(400); await qshot('25-analisi');
 assert.ok(await q.locator('svg.chart').count() >= 2, 'grafici presenti');

@@ -141,3 +141,46 @@ test('export previsione: riepilogo mensile e dettaglio per evento, coerenti tra 
   assert.equal(Math.round(totIn * 100), 50000);
 });
 test('mese: ultimo giorno corretto anche a febbraio bisestile', () => { assert.equal(monthEnd('2028-02'), '2028-02-29'); assert.equal(monthEnd('2026-02'), '2026-02-28'); });
+
+// ───── Situazione a una data ─────
+import { situationAt, situationCsv } from '../src/core/reports.js';
+async function sit({ withReceivable = true } = {}) {
+  let s = createEmptyState(ctx());
+  let r = await C.addAccount(s, ctx(), { name: 'Conto', openingCents: 100000, openingDate: '2026-01-01' }); s = r.state; const acc = r.result;
+  s = (await C.addPlanned(s, ctx(), { name: 'Affitto', kind: 'subscription', cents: 80000, dueDate: '2026-06-20', accountId: acc, fundMode: 'none', recurrence: 'none' })).state;
+  s = (await C.addPlanned(s, ctx(), { name: 'Assicurazione', kind: 'renewal', cents: 50000, dueDate: '2026-07-05', accountId: acc, fundMode: 'none', recurrence: 'none' })).state;
+  if (withReceivable) s = (await C.addReceivable(s, ctx(), { client: 'Cliente A', expectedCents: 100000, expectedDate: '2026-06-28', accountId: acc })).state;
+  s = (await C.addReceivable(s, ctx(), { client: 'Ritardatario', expectedCents: 30000, expectedDate: '2026-06-01', accountId: acc })).state;
+  return s;
+}
+test('situazione: una spesa coperta solo dagli incassi previsti è segnalata come tale, non come coperta', async () => {
+  const s = await sit();
+  const r = situationAt(s, '2026-06-15', '2026-07-31');
+  const byLabel = Object.fromEntries(r.lines.map((l) => [l.label, l]));
+  assert.equal(byLabel['Affitto'].status, 'ok'); assert.equal(byLabel['Affitto'].freeAfter, 20000);
+  assert.equal(byLabel['Assicurazione'].status, 'con_incassi');            // prudente −300 €, con l'incasso di 1.000 € torna positivo
+  assert.equal(byLabel['Assicurazione'].freeAfter, -30000); assert.equal(byLabel['Assicurazione'].freeAfterWithExpected, 70000);
+  assert.equal(r.verdict.level, 'attenzione'); assert.equal(r.verdict.shortfallPrudent, 30000); assert.equal(r.verdict.shortfallWithExpected, 0);
+  assert.equal(r.verdict.dependOnReceipts, 1); assert.equal(r.verdict.uncovered, 0);
+});
+test('situazione: senza incassi previsti la spesa è NON coperta e il verdetto è critico; i ritardi sono elencati e non contati', async () => {
+  const r = situationAt(await sit({ withReceivable: false }), '2026-06-15', '2026-07-31');
+  assert.equal(r.lines.find((l) => l.label === 'Assicurazione').status, 'scoperta');
+  assert.equal(r.verdict.level, 'critico'); assert.equal(r.verdict.shortfallWithExpected, 30000);
+  assert.deepEqual(r.overdue.map((x) => [x.client, x.cents]), [['Ritardatario', 30000]]);
+  assert.equal(r.totals.inExpected, 0);                                      // l'incasso in ritardo non entra nei totali
+});
+test('situazione: riepilogo per mese coerente con le righe e con i punti della previsione', async () => {
+  const r = situationAt(await sit(), '2026-06-15', '2026-07-31');
+  assert.deepEqual(r.months.map((m) => m.month), ['2026-06', '2026-07']);
+  const [g, l] = r.months;
+  assert.equal(g.inExpected, 100000); assert.equal(g.outFixed, 80000); assert.equal(g.partialStart, true);
+  assert.equal(l.outFixed, 50000); assert.equal(g.freeEnd, 20000); assert.equal(l.freeEnd, -30000); assert.equal(l.freeEndWithExpected, 70000);
+  assert.equal(r.totals.inExpected, 100000); assert.equal(r.totals.outTotal, 130000);
+  assert.equal(r.totals.freeEnd, 100000 - 130000);
+  assert.equal(r.start.free, 100000);
+});
+test('situazione: export CSV con stato leggibile', async () => {
+  const csv = situationCsv(await sit(), '2026-06-15', '2026-07-31');
+  assert.ok(csv.startsWith('﻿Data;Tipo')); assert.ok(csv.includes('Coperta solo se arrivano gli incassi')); assert.ok(csv.includes('Incasso previsto'));
+});

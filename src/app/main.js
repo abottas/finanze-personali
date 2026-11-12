@@ -2,7 +2,7 @@
 import { html, raw, esc } from './html.js';
 import { I } from './icons.js';
 import { createActions } from './actions.js';
-import { viewOverview, viewMoves, viewFunds, viewIncome, viewPlan, viewSettings, viewAnalysis } from './views.js';
+import { viewOverview, viewMoves, viewFunds, viewIncome, viewPlan, viewSettings, viewAnalysis, viewSituation } from './views.js';
 import { Vault, KDF_ITERATIONS, checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { IdbStorage } from '../storage/adapters.js';
 import { createEmptyState, makeCtx, migrateState } from '../core/state.js';
@@ -15,7 +15,7 @@ import { today as todayLocal } from '../core/dates.js';
 import { AppError } from '../core/errors.js';
 import * as C from '../core/commands.js';
 
-const VERSION = '0.12.1';
+const VERSION = '0.13.0';
 const $ = (s) => document.querySelector(s);
 const root = $('#app'), sheetRoot = $('#sheet-root'), toastEl = $('#toast'), cover = $('#cover');
 
@@ -226,11 +226,12 @@ function render() {
     case 'income': content = viewIncome(app); break;
     case 'plan': content = viewPlan(app); break;
     case 'analysis': content = viewAnalysis(app); break;
+    case 'situation': content = viewSituation(app); break;
     case 'settings': content = viewSettings(app, r.sub); tabs = false; break;
     default: content = viewOverview(app);
   }
   const scroll = window.scrollY;
-  root.innerHTML = html`${content}${tabs ? html`<div class="tabbar"><nav aria-label="Sezioni">${TABS.map(([id, label, icon]) => html`<button class="tab" data-nav="${id}" ${(r.name || 'overview') === id || (id === 'overview' && (r.name === 'analysis' || !TABS.some((t) => t[0] === r.name))) ? raw('aria-current="page"') : ''}>${icon}<span>${label}</span></button>`)}</nav></div>` : ''}`.s;
+  root.innerHTML = html`${content}${tabs ? html`<div class="tabbar"><nav aria-label="Sezioni">${TABS.map(([id, label, icon]) => html`<button class="tab" data-nav="${id}" ${(r.name || 'overview') === id || (id === 'plan' && r.name === 'situation') || (id === 'overview' && (r.name === 'analysis' || !TABS.some((t) => t[0] === r.name))) ? raw('aria-current="page"') : ''}>${icon}<span>${label}</span></button>`)}</nav></div>` : ''}`.s;
   hydrate(root);
   window.scrollTo(0, scroll);
 }

@@ -322,3 +322,6 @@ button.item:active { opacity: .6; }
 .kv .strong { font-weight: 700; color: var(--text); }
 .s.warn-t, .warn-t { color: var(--warn-text, #b45309); } .s.pos { color: var(--pos); }
 @media (prefers-color-scheme: dark) { .s.warn-t, .warn-t { color: #fbbf24; } }
+.row2 { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; } .row2 b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.row2.strong { font-weight: 700; } .row2.strong b { font-weight: 800; } .row2.neg b { color: var(--neg); }
+.sep { height: 1px; background: var(--line); margin: 8px 0; }

@@ -3,7 +3,7 @@ import { html, raw } from './html.js';
 import { I } from './icons.js';
 import { amt, empty, pill, bar, pctOf, accountTile, fundTile, catTile } from './ui.js';
 import { flowChart, balanceChart, cashflowChart, budgetChart, stackedChart } from './charts.js';
-import { monthlyReport, balanceHistory, categoryTrend, weeklyBudget, kpis, cashflowByMonth, monthLabel } from '../core/reports.js';
+import { situationAt, monthlyReport, balanceHistory, categoryTrend, weeklyBudget, kpis, cashflowByMonth, monthLabel } from '../core/reports.js';
 import { monthlySeries, categoryBreakdown, investedTotal } from '../core/analytics.js';
 import { estimateTaxes, taxLedger } from '../core/tax.js';
 import { monthlyPace } from '../core/allocation.js';
@@ -12,7 +12,7 @@ import { snapshot, fundNeed, pendingTransfers, reserveProgress, fundProgress, ch
 import { budgetStatus } from '../core/budget.js';
 import { forecast, expandPlanned } from '../core/forecast.js';
 import { formatEuro } from '../core/money.js';
-import { formatDate, formatDateLong, diffDays } from '../core/dates.js';
+import { formatDate, formatDateLong, diffDays, addDays as addDaysD } from '../core/dates.js';
 
 const byId = (arr) => Object.fromEntries(arr.map((x) => [x.id, x]));
 const KIND_LABEL = { goal: 'Obiettivo', tax: 'Fiscale', planned: 'Acquisto', reserve: 'Riserva', budget: 'Budget' };
@@ -366,6 +366,8 @@ export function viewPlan(app) {
         <span class="k">Incassi attesi (esclusi)</span><span class="num muted">${amt(expectedTotal)}</span></div>
       <div class="note">Previsione prudente: considera budget settimanale e acquisti programmati; <b>esclude</b> gli incassi non ricevuti.</div>`}
     </section>
+    <section class="card"><h2>Situazione a una data</h2><p class="small mt0">Cosa entra, cosa esce e se le spese previste sono coperte, in elenco: scegli fino a quando.</p>
+      <div class="chips">${[['eom', 'Fine mese'], ['eom2', 'Fine mese prossimo'], ['dec', '31 dicembre']].map(([k, t]) => html`<button class="chip" data-action="open-situation" data-v="${k}">${t}</button>`)}</div></section>
     ${cashflowCard(app)}
     ${issues.length ? html`<div>${issues.map((i) => html`<div class="alert ${i.severity === 'high' ? 'high' : ''}">${I.warn}<span>${i.message}${i.kind.includes('negative') ? ` dal ${formatDate(i.date)} (${formatEuro(i.cents)})` : ''}</span></div>`)}</div>` : ''}
 
@@ -646,3 +648,45 @@ function settingsStatus(app, back) {
       ${due.map((d) => html`<li class="item"><span class="tile sm col-${d.type === 'in' ? 'green' : d.late ? 'red' : 'gray'}">${d.icon}</span><div class="grow"><div class="t ellipsis">${d.title}</div><div class="s">${d.sub} · ${formatDate(d.date)}</div></div><button class="btn sm primary" data-action="${d.type === 'pay' ? 'complete-planned' : 'receive'}" data-id="${d.id}">${d.type === 'in' ? 'Incassata' : 'Pagato'}</button></li>`)}
       ${toConfirm.map((p) => html`<li class="item"><span class="tile sm col-purple">${KIND_ICON[p.kind]}</span><div class="grow"><div class="t">${p.name}</div><div class="s">${p.confirm === 'active' ? 'Da confermare come attiva' : 'Data da confermare'}</div></div><button class="btn sm primary" data-action="${p.confirm === 'active' ? 'confirm-planned' : 'planned'}" data-id="${p.id}">${p.confirm === 'active' ? 'Conferma' : 'Imposta data'}</button></li>`)}</ul>`}</div></div>`;
 }
+
+// ───────────────────────────── Situazione a una data ─────────────────────────────
+const SIT_STATUS = { ok: ['Coperta', 'pos'], con_incassi: ['Solo se arrivano gli incassi', 'warn'], scoperta: ['NON coperta', 'neg'] };
+export function viewSituation(app) {
+  const st = app.state, today = app.today;
+  const maxD = addDaysD(today, 365);
+  let until = app.ui.situationUntil ?? monthEndOf(today);
+  if (until < addDaysD(today, 1)) until = addDaysD(today, 1);
+  if (until > maxD) until = maxD;
+  const r = situationAt(st, today, until);
+  const v = r.verdict, T = r.totals;
+  const verdictBox = v.level === 'ok'
+    ? html`<div class="alert ok">${I.check}<span>Fino al <b>${formatDate(until, { year: true })}</b> le spese previste sono <b>coperte anche senza gli incassi previsti</b>. Libero minimo ${formatEuro(v.minFree)} (${formatDate(v.minFreeDate)}).</span></div>`
+    : v.level === 'attenzione'
+      ? html`<div class="alert">${I.warn}<span>Senza gli incassi previsti mancano <b>${formatEuro(v.shortfallPrudent)}</b> (punto più basso il ${formatDate(v.minFreeDate)}). <b>Con</b> gli incassi previsti è tutto coperto: ${v.dependOnReceipts} ${v.dependOnReceipts === 1 ? 'spesa dipende' : 'spese dipendono'} da incassi non ancora ricevuti.</span></div>`
+      : html`<div class="alert high">${I.warn}<span>Anche contando gli incassi previsti mancano <b>${formatEuro(v.shortfallWithExpected)}</b> (il ${formatDate(v.minFreeWithExpectedDate)}). ${v.uncovered} ${v.uncovered === 1 ? 'spesa non è coperta' : 'spese non sono coperte'}.</span></div>`;
+  const row2 = (a, b, cls = '') => html`<div class="row2 ${cls}"><span>${a}</span><b class="num">${b}</b></div>`;
+  const ins = r.lines.filter((l) => l.dir === 'in'), outs = r.lines.filter((l) => l.dir === 'out');
+  return html`<div class="screen"><button class="back" data-nav="plan">${I.back}Pianificazione</button>
+    ${topbar('Situazione a una data', `da oggi al ${formatDate(until, { year: true })}`, html`<button class="btn sm" data-action="export-situation">Esporta</button>`)}
+    <div class="chips">${[['eom', 'Fine mese'], ['eom2', 'Fine mese prossimo'], ['dec', '31 dic']].map(([k, t]) => html`<button class="chip" data-action="open-situation" data-v="${k}">${t}</button>`)}</div>
+    <label class="field"><span>Oppure scegli una data (entro 365 giorni)</span><input type="date" name="until" value="${until}" min="${addDaysD(today, 1)}" max="${maxD}" data-change="situation-date"></label>
+    ${v.partial.length ? html`<div class="alert">${I.warn}<span>Saldi da aggiornare: ${v.partial.join(', ')}. Il calcolo è <b>parziale</b>.</span></div>` : ''}
+    ${verdictBox}
+    <section class="card"><h2>In sintesi</h2>
+      ${row2('Liquidità oggi', formatEuro(r.start.total))}${row2('di cui vincolata a fondi', formatEuro(r.start.reserved))}${row2('Libera oggi', formatEuro(r.start.free), 'strong')}
+      <div class="sep"></div>
+      ${row2('Entrate previste (non garantite)', formatEuro(T.inExpected))}${row2('di cui da accantonare (tasse)', formatEuro(T.inExpected - T.inFree))}
+      ${row2('Uscite previste', formatEuro(T.outTotal))}${row2('· scadenze e spese fisse', formatEuro(T.outFixed))}${row2('· budget settimanale', formatEuro(T.outBudget))}${row2('· investimenti (PAC)', formatEuro(T.outInvest))}
+      <div class="sep"></div>
+      ${row2('Libero a fine periodo · prudente', formatEuro(T.freeEnd), T.freeEnd < 0 ? 'neg' : 'strong')}${row2('Libero a fine periodo · con incassi previsti', formatEuro(T.freeEndWithExpected), T.freeEndWithExpected < 0 ? 'neg' : 'strong')}
+      <div class="note">Prudente = solo i soldi che hai oggi. "Con incassi" include quelli previsti, che <b>non sono garantiti</b>; gli incassi entrano al netto della riserva fiscale. Il libero esclude il denaro già riservato ai fondi.</div></section>
+    <section class="card"><h2>Mese per mese</h2><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Mese</th><th>Entrate</th><th>Uscite</th><th>Libero fine (prudente)</th><th>Libero fine (con incassi)</th></tr></thead><tbody>
+      ${r.months.map((m) => html`<tr><td>${m.label.split(' ')[0]}${m.partialStart ? ' (da oggi)' : ''}${m.partialEnd ? ' (fino al ' + formatDate(m.to) + ')' : ''}</td><td>${formatEuro(m.inExpected)}</td><td>${formatEuro(m.outTotal)}</td><td>${amt(m.freeEnd, { tone: true })}</td><td>${amt(m.freeEndWithExpected, { tone: true })}</td></tr>`)}</tbody></table></div></section>
+    <section class="card"><h2>Entrate previste <span class="small muted">${formatEuro(T.inExpected)}</span></h2>
+      ${ins.length === 0 ? empty('Nessun incasso previsto nel periodo') : html`<ul class="list">${ins.map((l) => html`<li class="item"><div class="grow"><div class="t">${l.label}${l.projected ? html` ${pill('da fattura ricorrente')}` : ''}</div><div class="s">${formatDate(l.date)} · accantoni ${formatEuro(l.total - l.free)} · liberi ${formatEuro(l.free)}</div></div><div class="r num">${amt(l.total, { plus: true, tone: true })}</div></li>`)}</ul>`}
+      ${r.overdue.length ? html`<div class="note"><b>Già scaduti e non ricevuti (non contati):</b> ${r.overdue.map((o) => `${o.client} ${formatEuro(o.cents)} (atteso il ${formatDate(o.date)})`).join(' · ')}. Se arrivano, aumentano il libero.</div>` : ''}</section>
+    <section class="card"><h2>Uscite previste <span class="small muted">${formatEuro(T.outTotal)}</span></h2>
+      ${outs.length === 0 ? empty('Nessuna uscita prevista nel periodo') : html`<ul class="list">${outs.map((l) => { const [txt, tone] = SIT_STATUS[l.status]; return html`<li class="item block-item"><div class="row"><div class="grow"><div class="t">${l.label}</div><div class="s">${formatDate(l.date)}${l.type === 'budget' ? ' · budget' : l.type === 'investimento' ? ' · investimento' : ''}${l.covered ? ` · già riservati ${formatEuro(l.covered)}` : ''}</div></div><div class="r num">${amt(l.total)}</div></div><div class="row between small"><span>${pill(txt, tone)}</span><span class="muted">libero dopo: ${formatEuro(l.freeAfter)}${l.freeAfter < 0 ? ` · con incassi ${formatEuro(l.freeAfterWithExpected)}` : ''}</span></div></li>`; })}</ul>`}</section>
+    ${r.tax ? html`<section class="card"><h2>Tasse ${r.tax.year}</h2>${row2('Ancora da versare nell\'anno (stima)', formatEuro(r.tax.stillDue))}${row2('Riservato nel fondo tasse', formatEuro(r.tax.reserved))}${row2(r.tax.reserved >= r.tax.stillDue ? 'Riserva in eccesso' : 'Riserva mancante', formatEuro(Math.abs(r.tax.reserved - r.tax.stillDue)), r.tax.reserved < r.tax.stillDue ? 'neg' : '')}<div class="note">Le tasse sono <b>incluse tra le uscite sopra solo se le hai messe tra le scadenze</b>. Questa è la stima sull'incassato dell'anno, a parte.</div></section>` : ''}</div>`;
+}
+function monthEndOf(d) { const y = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)); return `${d.slice(0, 7)}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`; }

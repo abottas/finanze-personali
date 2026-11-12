@@ -3,7 +3,8 @@ import { snapshot, balanceOf } from './derive.js';
 import { monthlySeries, categoryBreakdown } from './analytics.js';
 import { budgetStatus } from './budget.js';
 import { forecast } from './forecast.js';
-import { addDays, addMonths, daysInMonth } from './dates.js';
+import { addDays, addMonths, daysInMonth, diffDays } from './dates.js';
+import { estimateAnnual } from './tax.js';
 import { toCsv, money, pct } from './csv.js';
 
 export const ymOf = (d) => d.slice(0, 7);
@@ -147,3 +148,89 @@ export function forecastDetailCsv(state, today, months = 12) {
   return toCsv(headers, rows);
 }
 export { money };
+
+// ───────────────────────── Situazione a una data ─────────────────────────
+/**
+ * Situazione ANALITICA da oggi a `until` (max 365 giorni): quanto entra, quanto esce, se le spese previste sono coperte.
+ *  • prudente = solo il denaro che hai oggi (nessun incasso non ricevuto)
+ *  • con incassi previsti = scenario informativo (non garantito)
+ * Il "libero" è la liquidità non vincolata a fondi: ogni incasso entra al netto della riserva fiscale.
+ * Stato di una spesa: ok (coperta dal libero) · con_incassi (coperta solo se arrivano gli incassi previsti) · scoperta.
+ */
+export function situationAt(state, today, until) {
+  const days = Math.max(1, Math.min(365, diffDays(until, today)));
+  const end = addDays(today, days);
+  const f = forecast(state, today, days);
+  const planned = Object.fromEntries(state.planned.map((p) => [p.id, p]));
+  const ptAt = (d) => { const i = Math.min(days, Math.max(0, diffDays(d, today))); return f.points[i]; };
+  const statusAt = (d) => { const p = ptAt(d); return p.free >= 0 ? 'ok' : p.freeWithExpected >= 0 ? 'con_incassi' : 'scoperta'; };
+
+  // Righe: il budget settimanale si raggruppa per mese (altrimenti sono decine di righe uguali).
+  const lines = [];
+  const budgetByMonth = {};
+  for (const e of f.events) {
+    if (e.kind === 'receivable') { lines.push({ dir: 'in', type: 'incasso', date: e.date, label: e.label, total: e.total, free: e.free, projected: !!e.projected }); continue; }
+    if (e.kind === 'budget') {
+      const m = ymOf(e.date), g = (budgetByMonth[m] ??= { dir: 'out', type: 'budget', date: e.date, lastDate: e.date, label: '', total: 0, free: 0, n: 0 });
+      g.total += e.total; g.free += e.free; g.n++; g.lastDate = e.date; continue;
+    }
+    const pl = planned[e.plannedId];
+    lines.push({ dir: 'out', type: pl?.kind === 'investment' ? 'investimento' : 'scadenza', date: e.date, lastDate: e.date, label: e.label, total: e.total, free: e.free, covered: e.covered ?? 0 });
+  }
+  for (const g of Object.values(budgetByMonth)) { g.label = g.n === 1 ? 'Budget settimanale' : `Budget settimanale (${g.n} settimane)`; lines.push(g); }
+  lines.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.dir === 'in' ? 1 : -1));
+  for (const l of lines) {
+    if (l.dir === 'out') { l.status = statusAt(l.lastDate); const p = ptAt(l.lastDate); l.freeAfter = p.free; l.freeAfterWithExpected = p.freeWithExpected; }
+    else { const p = ptAt(l.date); l.freeAfter = p.free; l.freeAfterWithExpected = p.freeWithExpected; }
+  }
+
+  // Riepilogo per mese
+  const months = [];
+  for (let m = ymOf(today); m <= ymOf(end); m = ymOf(addMonths(m + '-01', 1))) {
+    const mEnd = monthEnd(m) < end ? monthEnd(m) : end, mStart = m === ymOf(today) ? today : `${m}-01`;
+    const row = { month: m, label: monthLabel(m), partialStart: m === ymOf(today) && today.slice(8) !== '01', partialEnd: mEnd < monthEnd(m), from: mStart, to: mEnd, inExpected: 0, inFree: 0, outFixed: 0, outBudget: 0, outInvest: 0, outFree: 0 };
+    for (const l of lines) {
+      if (ymOf(l.date) !== m) continue;
+      if (l.dir === 'in') { row.inExpected += l.total; row.inFree += l.free; }
+      else { const t = -l.total; if (l.type === 'budget') row.outBudget += t; else if (l.type === 'investimento') row.outInvest += t; else row.outFixed += t; row.outFree += -l.free; }
+    }
+    row.outTotal = row.outFixed + row.outBudget + row.outInvest;
+    row.netPrudent = -row.outFree; row.netWithExpected = row.inFree - row.outFree;
+    const p = ptAt(mEnd); row.freeEnd = p.free; row.freeEndWithExpected = p.freeWithExpected;
+    months.push(row);
+  }
+  const sum = (k) => months.reduce((t, r) => t + r[k], 0);
+  const totals = { inExpected: sum('inExpected'), inFree: sum('inFree'), outFixed: sum('outFixed'), outBudget: sum('outBudget'), outInvest: sum('outInvest'), outTotal: sum('outTotal'), outFree: sum('outFree') };
+  const last = f.points.at(-1);
+  totals.freeEnd = last.free; totals.freeEndWithExpected = last.freeWithExpected;
+  totals.totalEnd = last.total; totals.totalEndWithExpected = last.totalWithExpected;
+
+  // Minimi e verdetto
+  let minP = f.points[0], minE = f.points[0];
+  for (const p of f.points) { if (p.free < minP.free) minP = p; if (p.freeWithExpected < minE.freeWithExpected) minE = p; }
+  const outs = lines.filter((l) => l.dir === 'out');
+  const uncovered = outs.filter((l) => l.status === 'scoperta'), depend = outs.filter((l) => l.status === 'con_incassi');
+  const unknown = state.accounts.filter((a) => a.balanceUnknown && !a.archived).map((a) => a.name);
+  const shortP = Math.max(0, -minP.free), shortE = Math.max(0, -minE.freeWithExpected);
+  const verdict = { minFree: minP.free, minFreeDate: minP.date, minFreeWithExpected: minE.freeWithExpected, minFreeWithExpectedDate: minE.date, uncovered: uncovered.length, dependOnReceipts: depend.length, shortfallPrudent: shortP, shortfallWithExpected: shortE, partial: unknown };
+  verdict.level = shortE > 0 ? 'critico' : shortP > 0 ? 'attenzione' : 'ok';
+
+  const overdue = state.receivables.filter((r) => (r.status === 'expected' || r.status === 'partial') && r.expectedDate < today)
+    .map((r) => ({ client: r.client, date: r.expectedDate, cents: r.expectedCents - (r.receivedCents ?? 0) })).filter((r) => r.cents > 0);
+  let tax = null;
+  if (state.settings.taxProfile.enabled) {
+    const year = Number(today.slice(0, 4)), a = estimateAnnual(state, year, today);
+    const fund = state.funds.find((x) => x.id === state.settings.taxProfile.fundId);
+    const reserved = fund ? snapshot(state).funds[fund.id].available : 0;
+    tax = { year, stillDue: a.stillDue, reserved };
+  }
+  return { today, until: end, days, start: { total: f.start.total, free: f.start.free, reserved: f.start.total - f.start.free }, lines, months, totals, verdict, overdue, tax };
+}
+
+const STATUS_IT = { ok: 'Coperta', con_incassi: 'Coperta solo se arrivano gli incassi', scoperta: 'NON coperta' };
+export function situationCsv(state, today, until) {
+  const r = situationAt(state, today, until);
+  const headers = ['Data', 'Tipo', 'Descrizione', 'Entrata', 'Uscita', 'Di cui accantonata/riservata', 'Libero dopo (prudente)', 'Libero dopo (con incassi previsti)', 'Stato'];
+  const rows = r.lines.map((l) => [l.date, l.type === 'incasso' ? (l.projected ? 'Incasso previsto (fattura ricorrente)' : 'Incasso previsto') : l.type === 'budget' ? 'Budget' : l.type === 'investimento' ? 'Investimento (PAC)' : 'Scadenza', l.label, l.dir === 'in' ? l.total : '', l.dir === 'out' ? -l.total : '', l.dir === 'in' ? l.total - l.free : l.dir === 'out' ? l.covered ?? '' : '', l.freeAfter, l.freeAfterWithExpected, l.dir === 'out' ? STATUS_IT[l.status] : '']);
+  return toCsv(headers, rows);
+}

@@ -17,7 +17,7 @@ import { createBackup, verifyBackup } from '../crypto/backup.js';
 import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { runIntegrityChecks } from '../core/integrity.js';
 import { estimateTaxes, grossForNet } from '../core/tax.js';
-import { statsCsv, forecastSummaryCsv, forecastDetailCsv } from '../core/reports.js';
+import { situationCsv, statsCsv, forecastSummaryCsv, forecastDetailCsv } from '../core/reports.js';
 
 const ACC_TYPES = [['checking', 'Conto corrente'], ['savings', 'Risparmio'], ['cash', 'Contanti'], ['investment', 'Investimento (PAC) · non è liquidità'], ['other', 'Altro']];
 const PRIORITY = [['1', 'Alta'], ['2', 'Media'], ['3', 'Bassa']];
@@ -825,6 +825,26 @@ export function createActions(api) {
     onboarding: onboardingSheet,
     'export-ics': icsSheet,
     rebalance: (el) => rebalance(el.dataset.id),
+    'open-situation': (el) => {
+      const t = app.today, y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7));
+      const eom = (yy, mm) => `${yy}-${String(mm).padStart(2, '0')}-${String(new Date(yy, mm, 0).getDate()).padStart(2, '0')}`;
+      app.ui.situationUntil = el.dataset.v === 'eom' ? eom(y, m) : el.dataset.v === 'eom2' ? (m === 12 ? eom(y + 1, 1) : eom(y, m + 1)) : `${y}-12-31`;
+      if (app.ui.situationUntil <= t) app.ui.situationUntil = el.dataset.v === 'dec' ? `${y + 1}-12-31` : eom(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1);
+      location.hash = '#/situation'; api.render();
+    },
+    'export-situation': () => {
+      const until = app.ui.situationUntil ?? app.today;
+      api.openSheet({
+        title: 'Esporta la situazione', submit: 'Crea file',
+        body: html`<div class="note">File <b>CSV</b> con ogni entrata e uscita prevista, il libero dopo ciascuna e se è coperta. <b>Non è cifrato</b>.</div><label class="check"><input type="checkbox" name="ack" required><span>Ho capito che il file non è cifrato</span></label>`,
+        onSubmit: async () => {
+          const name = `situazione-${app.today}-${until}.csv`, text = situationCsv(st(), app.today, until);
+          const file = new File([text], name, { type: 'text/csv' });
+          if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e?.name === 'AbortError') return; } }
+          saveBlob(name, text, 'text/csv');
+        },
+      });
+    },
     'set-range': (el) => { app.ui.analysisRange = Number(el.dataset.v); api.render(); },
     'chart-month': (el) => { app.ui.analysisMonth = el.dataset.v; api.render(); },
     'export-report': reportSheet,
@@ -863,6 +883,7 @@ export function createActions(api) {
       set('gross', formatEuro(gross)); set('base', formatEuro(t.base)); set('inps', formatEuro(t.inps)); set('imp', formatEuro(t.imposta));
       set('tax', formatEuro(t.total)); set('net', formatEuro(t.netAfter)); set('pct', (t.total / gross * 100).toFixed(1).replace('.', ',') + '%');
     },
+    'situation-date': (el) => { if (el.value) { app.ui.situationUntil = el.value; api.render(); } },
     'reserve-choice': (el) => { const i = el.form.elements.a0; if (i) i.value = el.dataset.amount; },
     'planned-kind': (el) => {
       const [rec, mode, cat] = PKIND_DEF[el.value]; const f = el.form;
