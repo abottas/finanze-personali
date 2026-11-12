@@ -68,3 +68,6 @@ Uso personale. Nessuna licenza concessa.
 
 ### Se la pubblicazione resta bloccata
 Se in **Actions** l'esecuzione "pages build and deployment" resta in coda o fallisce con errore 504, è un problema temporaneo di GitHub: rilanciala (**Re-run**) oppure fai un nuovo commit, che avvia una pubblicazione nuova. Il sito resta alla versione precedente finché non va a buon fine.
+
+## Tasse sull'incassato dell'anno (v0.9)
+In Impostazioni → Tasse e contributi: stima per cassa (solo incassi realmente ricevuti nell'anno), con "Aggiungi già incassato" per i dati prima dell'uso dell'app (nessun doppio conteggio dopo la data indicata) e uno scenario non garantito con gli incassi attesi entro il 31 dicembre.

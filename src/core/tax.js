@@ -43,22 +43,36 @@ export function suggestedSetAside(netCents, profile) {
  */
 export function estimateAnnual(state, year, today = null) {
   const tp = state.settings.taxProfile;
+  const op = tp.opening && tp.opening.year === year ? tp.opening : null;
   const inYear = (d) => d.slice(0, 4) === String(year) && (!today || d <= today);
-  let ricavi = 0, inpsPaid = 0, impostaPaid = 0;
+  // I dati inseriti a mano coprono dal 1° gennaio a `untilDate`: i movimenti dell'app fino a quella data NON si contano (niente doppioni).
+  const counted = (d) => inYear(d) && (!op || d > op.untilDate);
+  let ricavi = op?.ricaviCents ?? 0, inpsPaid = op?.inpsPaidCents ?? 0, impostaPaid = op?.impostaPaidCents ?? 0;
+  const fromApp = { ricavi: 0 };
   for (const t of state.transactions) {
-    if (t.status !== 'posted' || !inYear(t.date)) continue;
-    if (t.kind === 'income' && t.categoryId === 'cat_pro') ricavi += t.cents;
+    if (t.status !== 'posted' || !counted(t.date)) continue;
+    if (t.kind === 'income' && t.categoryId === 'cat_pro') { ricavi += t.cents; fromApp.ricavi += t.cents; }
     if (t.kind === 'expense' && t.categoryId === 'cat_inps') inpsPaid += -t.cents;
     if (t.kind === 'expense' && t.categoryId === 'cat_tax') impostaPaid += -t.cents;
   }
-  const base = mulBp(ricavi, tp.coefficientBp);
-  const inpsDue = mulBp(base, tp.inpsBp);
-  const impostaDue = mulBp(Math.max(0, base - inpsPaid), tp.taxBp);
+  const calc = (rev, inpsDeducted) => {
+    const base = mulBp(rev, tp.coefficientBp);
+    const inps = mulBp(base, tp.inpsBp);
+    return { base, inps, imposta: mulBp(Math.max(0, base - inpsDeducted), tp.taxBp) };
+  };
+  const { base, inps: inpsDue, imposta: impostaDue } = calc(ricavi, inpsPaid);
   const impostaNoDeduction = mulBp(base, tp.taxBp);
   const impostaIfAllInpsPaid = mulBp(Math.max(0, base - inpsDue), tp.taxBp);
   const totalDue = inpsDue + impostaDue;
   const paid = inpsPaid + impostaPaid;
-  return { year, ricavi, base, inpsDue, inpsPaid, impostaDue, impostaNoDeduction, impostaIfAllInpsPaid, impostaPaid, totalDue, paid, stillDue: Math.max(0, totalDue - paid) };
+  // Scenario INFORMATIVO (non garantito): aggiunge gli incassi ancora attesi entro il 31 dicembre. Quelli che arrivano a gennaio contano nell'anno dopo.
+  let expectedRest = 0;
+  for (const r of state.receivables) {
+    if ((r.status === 'expected' || r.status === 'partial') && r.expectedDate <= `${year}-12-31`) expectedRest += r.expectedCents - (r.receivedCents ?? 0);
+  }
+  const sc = calc(ricavi + expectedRest, inpsPaid);
+  const scenarioTotalDue = sc.inps + sc.imposta;
+  return { year, ricavi, ricaviFromApp: fromApp.ricavi, opening: op, base, inpsDue, inpsPaid, impostaDue, impostaNoDeduction, impostaIfAllInpsPaid, impostaPaid, totalDue, paid, stillDue: Math.max(0, totalDue - paid), scenario: { expectedRest, ricavi: ricavi + expectedRest, totalDue: scenarioTotalDue, stillDue: Math.max(0, scenarioTotalDue - paid) } };
 }
 
 /**
@@ -88,7 +102,7 @@ export function taxLedger(state, year, today = null) {
   }
   return {
     year,
-    estimate: { totalDue: estimate.totalDue, stillDue: estimate.stillDue, ricavi: estimate.ricavi, inpsDue: estimate.inpsDue, impostaDue: estimate.impostaDue },
+    estimate: { totalDue: estimate.totalDue, stillDue: estimate.stillDue, ricavi: estimate.ricavi, ricaviFromApp: estimate.ricaviFromApp, inpsDue: estimate.inpsDue, impostaDue: estimate.impostaDue, base: estimate.base, opening: estimate.opening, scenario: estimate.scenario },
     earmarked: { allocatedYear, reservedNow },
     transferred: { year: transferredYear },
     paid: { inps: estimate.inpsPaid, imposta: estimate.impostaPaid, total: estimate.paid },

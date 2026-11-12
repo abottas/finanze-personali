@@ -718,6 +718,27 @@ export function setTaxProfile(state, ctx, patch) {
     log('update', 'tax_profile', 'tax_profile', before, copy(tp), tp.enabled ? 'Profilo fiscale attivo' : 'Profilo fiscale disattivato');
   });
 }
+/**
+ * Dati dell'anno già maturati PRIMA di usare l'app (incassato, contributi e acconti già versati), a mano.
+ * Valgono dal 1° gennaio a `untilDate`: i movimenti dell'app fino a quel giorno non si contano due volte.
+ * `null` = rimuove i dati iniziali. Si possono rimodificare quando vuoi: ogni cambio resta nel registro.
+ */
+export function setTaxOpening(state, ctx, opening) {
+  return mutate(state, ctx, (s, log) => {
+    const tp = s.settings.taxProfile;
+    const before = copy(tp.opening);
+    if (opening === null) tp.opening = null;
+    else {
+      const { year, untilDate, ricaviCents = 0, inpsPaidCents = 0, impostaPaidCents = 0 } = opening;
+      req(Number.isInteger(year) && year >= 2000 && year <= 2100, 'anno', 'Anno non valido');
+      req(isDate(untilDate) && untilDate.startsWith(String(year)), 'data_non_valida', "La data deve cadere nell'anno indicato");
+      req(untilDate <= ctx.today, 'data_futura', 'La data non può essere futura');
+      for (const c of [ricaviCents, inpsPaidCents, impostaPaidCents]) { assertCents(c); req(c >= 0, 'importo', 'Gli importi non possono essere negativi'); }
+      tp.opening = { year, untilDate, ricaviCents, inpsPaidCents, impostaPaidCents };
+    }
+    log('update', 'tax_profile', 'tax_profile', { opening: before }, { opening: copy(tp.opening) }, 'Dati fiscali iniziali (inseriti a mano)');
+  });
+}
 /** Configurazione guidata: fondo tasse sul conto scelto + profilo fiscale attivo + budget settimanale. */
 export function setupFreelanceProfile(state, ctx, { taxAccountId, weeklyBudgetCents = 0 }) {
   return mutate(state, ctx, (s, log) => {
