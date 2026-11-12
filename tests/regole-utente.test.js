@@ -59,7 +59,7 @@ test('1. senza regola personalizzata si usa la stima teorica; i 300 € non vann
   ({ state: s } = await C.receiveReceivable(s, ctx(), { id: rc.result, cents: 40000 }));
   const plan = proposeAllocation(s, { accountId: isy, cents: 40000, today: TODAY, professional: true, receivable: s.receivables[0] });
   assert.equal(plan.items.length, 1); assert.equal(plan.items[0].reason, 'tax');
-  assert.equal(plan.items[0].cents, 10000);   // 400 € → stima teorica 96,94 € → arrotondata a 100 €
+  assert.equal(plan.items[0].cents, 9000);   // 400 € → stima teorica (con deduzione contributi) ≈ 92,7 € → arrotondata a 90 €
   assert.ok(plan.remainderCents > 0);
 });
 test('1. la riserva non supera mai quanto incassato; un incasso molto inferiore al previsto è PARZIALE (quota proporzionale)', async () => {
@@ -168,14 +168,15 @@ test('4. debito annuale: calcolato sul cumulato dell\'anno (per cassa), non somm
   const a = estimateAnnual(s, 2026);
   assert.equal(a.ricavi, 310000); assert.equal(a.base, 241800);                  // 3.100 × 78%
   assert.equal(a.inpsDue, 63037);                                                // 2.418 × 26,07% = 630,37
-  assert.equal(a.impostaDue, 12090);                                             // nessun contributo versato → nessuna deduzione
-  assert.equal(a.totalDue, 63037 + 12090);
+  assert.equal(a.impostaDue, 8938);                                              // (2.418 − 630,37) × 5%: contributi maturati sullo stesso reddito (metodo predefinito)
+  assert.equal(a.totalDue, 63037 + 8938);
   const sumPerInvoice = [120000, 70000, 30000, 90000].map((c) => estimateTaxes(c, P).total).reduce((x, y) => x + y, 0);
-  assert.ok(Math.abs(sumPerInvoice - a.totalDue) <= 4);                          // senza versamenti coincidono (a meno di arrotondamenti)
+  assert.ok(Math.abs(sumPerInvoice - a.totalDue) <= 4);                          // somma per fattura e cumulato annuale coincidono (a meno di arrotondamenti)
 });
-test('4. contributi deducibili: riducono l\'imponibile dell\'imposta SOLO se effettivamente versati nell\'anno', async () => {
-  const none = estimateAnnual((await year([120000, 70000, 30000, 90000])).s, 2026);
-  const paid = estimateAnnual((await year([120000, 70000, 30000, 90000], 30000)).s, 2026);
+test('4. metodo "versati": i contributi riducono l\'imponibile SOLO se effettivamente versati nell\'anno', async () => {
+  const strict = (s) => { s.settings.taxProfile.inpsDeduction = 'paid'; return s; };
+  const none = estimateAnnual(strict((await year([120000, 70000, 30000, 90000])).s), 2026);
+  const paid = estimateAnnual(strict((await year([120000, 70000, 30000, 90000], 30000)).s), 2026);
   assert.equal(paid.inpsPaid, 30000);
   assert.equal(paid.impostaDue, Math.round((241800 - 30000) * 0.05));            // (imponibile − contributi versati) × 5%
   assert.ok(paid.impostaDue < none.impostaDue);
@@ -192,9 +193,11 @@ test('4. i versamenti effettuati riducono il dovuto residuo; altre entrate e alt
   assert.equal(a.stillDue, a.totalDue - 15000);
   assert.equal(estimateAnnual(s, 2025).ricavi, 0);
 });
-test('4. la stima per singola fattura non applica mai deduzioni', () => {
+test('4. stima per singola fattura: imposta su (reddito − INPS maturati); col metodo "versati" nessuna deduzione', () => {
   const t = estimateTaxes(120000, P);
-  assert.equal(t.imposta, 4680); assert.equal(t.total, 24402 + 4680);
+  assert.equal(t.imposta, 3460); assert.equal(t.total, 24402 + 3460);
+  const u = estimateTaxes(120000, { ...P, inpsDeduction: 'paid' });
+  assert.equal(u.imposta, 4680); assert.equal(u.total, 24402 + 4680);
 });
 
 // ─────────────── 6. Calendario: duplicati e aggiornamenti ───────────────

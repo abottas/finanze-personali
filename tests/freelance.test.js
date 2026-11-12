@@ -12,23 +12,25 @@ import { validateState } from '../src/core/validate.js';
 import { migrateState } from '../src/core/state.js';
 import { base, ctx, expectError, TODAY } from './helpers.js';
 
-const PROFILE = { coefficientBp: 7800, inpsBp: 2607, taxBp: 500, deductInps: false, roundStepCents: 1000 };
+const PROFILE = { coefficientBp: 7800, inpsBp: 2607, taxBp: 500, roundStepCents: 1000 };
 
 test('forfettario + Gestione Separata: esempio fattura 1.200 €', () => {
   const t = estimateTaxes(120000, PROFILE);
   assert.equal(t.base, 93600);           // 936,00 € imponibile (78%)
   assert.equal(t.inps, 24402);           // 26,07% di 936 = 244,02 (244,0152 arrotondato)
-  assert.equal(t.imposta, 4680);         // 5% di 936 = 46,80
-  assert.equal(t.total, 29082);
-  assert.equal(t.netAfter, 90918);
+  assert.equal(t.imposta, 3460);         // 5% di (936 − 244,02) = 34,60: i contributi maturati sullo stesso reddito si deducono
+  assert.equal(t.total, 27862);
+  assert.equal(t.netAfter, 92138);
 });
-test('stima per singola fattura: nessuna deduzione arbitraria dei contributi (la deduzione è solo annuale, sui versamenti reali)', () => {
-  const t = estimateTaxes(120000, { ...PROFILE, deductInps: true }); // un eventuale flag residuo viene ignorato
+test('metodo di calcolo: "maturati" (predefinito) deduce i contributi del reddito; "versati" non deduce nulla sulla singola stima', () => {
+  assert.equal(estimateTaxes(140000, PROFILE).total, 32505);   // 1.400 € → 325,05 € · netto 1.074,95 €
+  assert.equal(estimateTaxes(140000, PROFILE).netAfter, 107495);
+  const t = estimateTaxes(120000, { ...PROFILE, inpsDeduction: 'paid' });
   assert.equal(t.imposta, 4680);
 });
 test('accantonamento suggerito: arrotondato al passo scelto, mai oltre l\'importo', () => {
-  assert.equal(suggestedSetAside(70000, PROFILE).setAside, 17000);       // 169,64 → 170
-  assert.equal(suggestedSetAside(120000, PROFILE).setAside, 29000);      // 290,82 → 290
+  assert.equal(suggestedSetAside(70000, PROFILE).setAside, 16000);       // 160,xx → 160
+  assert.equal(suggestedSetAside(120000, PROFILE).setAside, 28000);      // 278,62 → 280
   assert.equal(suggestedSetAside(120000, { ...PROFILE, roundStepCents: 5000 }).setAside, 30000);
   assert.equal(suggestedSetAside(100, PROFILE).setAside <= 100, true);
   assert.equal(roundToStep(1234, 1), 1234);
@@ -49,21 +51,21 @@ test('incasso professionale: la riserva è VIRTUALE sul conto di accredito; ness
   const before = JSON.stringify(s);
   const plan = proposeAllocation(s, { accountId: a1, cents: 120000, today: TODAY, professional: true });
   assert.equal(JSON.stringify(s), before);                        // la proposta non modifica nulla
-  assert.equal(plan.items.length, 1); assert.equal(plan.items[0].cents, 29000);
+  assert.equal(plan.items.length, 1); assert.equal(plan.items[0].cents, 28000);
   assert.equal(plan.items[0].accountId, a1); assert.equal(plan.items[0].pendingTransferTo, a2);
   ({ state: s } = await C.applyAllocationPlan(s, ctx(), plan.items));
   assert.equal(s.transfers.length, 0);                            // NESSUN trasferimento registrato come eseguito
   const sn = snapshot(s);
   assert.equal(sn.balances[a1], 100000 + 120000); assert.equal(sn.balances[a2], 50000); // i saldi bancari non cambiano
-  assert.equal(sn.funds[taxFund].byAccount[a1], 29000);           // la riserva pesa sul conto dove sono i soldi
-  assert.equal(sn.freeByAccount[a1], 220000 - 29000);
-  assert.deepEqual(pendingTransfers(s, sn), [{ fundId: taxFund, fromAccountId: a1, toAccountId: a2, cents: 29000 }]);
+  assert.equal(sn.funds[taxFund].byAccount[a1], 28000);           // la riserva pesa sul conto dove sono i soldi
+  assert.equal(sn.freeByAccount[a1], 220000 - 28000);
+  assert.deepEqual(pendingTransfers(s, sn), [{ fundId: taxFund, fromAccountId: a1, toAccountId: a2, cents: 28000 }]);
   // solo dopo la CONFERMA del bonifico nasce il trasferimento reale e la riserva segue il denaro
-  ({ state: s } = await C.confirmFundTransfer(s, ctx(), { fundId: taxFund, fromAccountId: a1, toAccountId: a2, cents: 29000, date: TODAY }));
+  ({ state: s } = await C.confirmFundTransfer(s, ctx(), { fundId: taxFund, fromAccountId: a1, toAccountId: a2, cents: 28000, date: TODAY }));
   const sn2 = snapshot(s);
   assert.equal(s.transfers.length, 1); assert.equal(s.transfers[0].purpose, 'fund');
-  assert.equal(sn2.balances[a1], 220000 - 29000); assert.equal(sn2.balances[a2], 50000 + 29000);
-  assert.equal(sn2.funds[taxFund].byAccount[a2], 29000); assert.equal(sn2.funds[taxFund].byAccount[a1] ?? 0, 0);
+  assert.equal(sn2.balances[a1], 220000 - 28000); assert.equal(sn2.balances[a2], 50000 + 28000);
+  assert.equal(sn2.funds[taxFund].byAccount[a2], 28000); assert.equal(sn2.funds[taxFund].byAccount[a1] ?? 0, 0);
   assert.equal(sn2.total, sn.total); assert.deepEqual(pendingTransfers(s, sn2), []);
   assert.equal(sn2.freeByAccount[a1], sn.freeByAccount[a1]);      // il libero personale non cambia
   assert.equal((await runIntegrityChecks(s)).ok, true);
@@ -182,14 +184,14 @@ test('analisi mensile: incassi, spese, tasse stimate e netto', async () => {
   await add(-9999, 'expense', 'cat_tax', '2026-06-10');         // pagamento imposte: non conta due volte
   await add(30000, 'income', 'cat_in_other', '2026-05-20');
   ({ state: s } = await C.addTransfer(s, ctx(), { fromAccountId: a1, toAccountId: a2, cents: 5000, date: '2026-06-11' })); // trasferimento: non è né entrata né spesa
-  ({ state: s } = await C.assignToFund(s, ctx(), s.settings.taxProfile.fundId, 29000, 'riserva', a1)); // riserva effettiva (tua regola)
+  ({ state: s } = await C.assignToFund(s, ctx(), s.settings.taxProfile.fundId, 28000, 'riserva', a1)); // riserva effettiva (tua regola)
   const m = monthlySeries(s, TODAY, 3);
   assert.deepEqual(m.map((x) => x.month), ['2026-04', '2026-05', '2026-06']);
   const jun = m[2];
   assert.equal(jun.income, 120000); assert.equal(jun.expense, 24500);
-  assert.equal(jun.tax, 29000);                 // grafico = riserva EFFETTIVA
-  assert.equal(jun.taxEstimate, 29082);         // la stima teorica resta distinta
-  assert.equal(jun.net, 120000 - 29000 - 24500);
+  assert.equal(jun.tax, 28000);                 // grafico = riserva EFFETTIVA
+  assert.equal(jun.taxEstimate, 27862);         // la stima teorica resta distinta
+  assert.equal(jun.net, 120000 - 28000 - 24500);
   assert.equal(m[1].income, 30000); assert.equal(m[1].tax, 0); // altre entrate: nessuna riserva
   const cats = categoryBreakdown(s, '2026-06');
   assert.deepEqual(cats.map((c) => [c.id, c.cents]), [['cat_food', 22000], ['cat_subs', 2500]]);

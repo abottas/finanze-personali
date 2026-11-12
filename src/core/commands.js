@@ -713,7 +713,8 @@ export function setTaxProfile(state, ctx, patch) {
   return mutate(state, ctx, (s, log) => {
     const before = copy(s.settings.taxProfile);
     const tp = s.settings.taxProfile;
-    for (const k of ['enabled', 'coefficientBp', 'inpsBp', 'taxBp', 'roundStepCents', 'fundId']) if (patch[k] !== undefined) tp[k] = patch[k];
+    for (const k of ['enabled', 'coefficientBp', 'inpsBp', 'taxBp', 'roundStepCents', 'fundId', 'inpsDeduction']) if (patch[k] !== undefined) tp[k] = patch[k];
+    req(['accrued', 'paid'].includes(tp.inpsDeduction), 'metodo', 'Metodo di deduzione non valido');
     if (tp.enabled) { const f = find(s.funds, tp.fundId, 'Fondo per le tasse'); req(!f.archived, 'fondo_archiviato', 'Il fondo per le tasse è archiviato'); }
     log('update', 'tax_profile', 'tax_profile', before, copy(tp), tp.enabled ? 'Profilo fiscale attivo' : 'Profilo fiscale disattivato');
   });

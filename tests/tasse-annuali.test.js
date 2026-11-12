@@ -69,3 +69,16 @@ test('validazione dei dati iniziali e rimozione', async () => {
   r = await C.setTaxOpening(r.state, ctx(), null);
   assert.equal(r.state.settings.taxProfile.opening, null);
 });
+
+test('formula dell\'utente: 17.330 € incassati → imponibile 78%, INPS 26,07%, imposta 5% su (reddito − INPS), netto', async () => {
+  let { s, acc } = await setup();
+  s = await inc(s, acc, 1733000, '2026-06-10');
+  const a = estimateAnnual(s, 2026);
+  assert.equal(a.base, 1351740);                        // 13.517,40
+  assert.equal(a.inpsDue, 352399);                      // 26,07% → 3.523,99
+  assert.equal(a.impostaDue, 49967);                    // (13.517,40 − 3.523,95) × 5% = 499,67
+  assert.equal(a.totalDue, 352399 + 49967);
+  assert.equal(1733000 - a.totalDue, 1330634);          // netto
+  s.settings.taxProfile.inpsDeduction = 'paid';
+  assert.equal(estimateAnnual(s, 2026).impostaDue, 67587);   // senza versamenti nessuna deduzione
+});

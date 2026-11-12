@@ -10,11 +10,15 @@
 //  La "riserva fiscale" che accantoni davvero è una scelta tua (regola personalizzata per cliente): terza cosa.
 import { mulBp } from './money.js';
 
-/** Stima teorica su una singola fattura (senza deduzione dei contributi: prudente). */
+/**
+ * Stima teorica su un compenso: reddito = compenso × coefficiente; INPS = reddito × aliquota;
+ * imposta = (reddito − INPS) × aliquota sostitutiva (metodo "maturati", predefinito) oppure reddito × aliquota
+ * (metodo "versati": nessuna deduzione finché non versi i contributi).
+ */
 export function estimateTaxes(netCents, profile) {
-  const base = mulBp(netCents, profile.coefficientBp);   // reddito imponibile lordo
-  const inps = mulBp(base, profile.inpsBp);              // contributi: sul reddito imponibile lordo
-  const imposta = mulBp(base, profile.taxBp);            // imposta: senza dedurre i contributi di questa fattura
+  const base = mulBp(netCents, profile.coefficientBp);   // reddito forfettario
+  const inps = mulBp(base, profile.inpsBp);              // contributi Gestione Separata sul reddito
+  const imposta = mulBp(profile.inpsDeduction === 'paid' ? base : Math.max(0, base - inps), profile.taxBp);
   const total = inps + imposta;
   return { base, inps, imposta, total, netAfter: netCents - total };
 }
@@ -58,9 +62,10 @@ export function estimateAnnual(state, year, today = null) {
   const calc = (rev, inpsDeducted) => {
     const base = mulBp(rev, tp.coefficientBp);
     const inps = mulBp(base, tp.inpsBp);
-    return { base, inps, imposta: mulBp(Math.max(0, base - inpsDeducted), tp.taxBp) };
+    return { base, inps, imposta: mulBp(Math.max(0, base - (inpsDeducted ?? inps)), tp.taxBp) };
   };
-  const { base, inps: inpsDue, imposta: impostaDue } = calc(ricavi, inpsPaid);
+  const accrued = tp.inpsDeduction !== 'paid';
+  const { base, inps: inpsDue, imposta: impostaDue } = calc(ricavi, accrued ? null : inpsPaid);
   const impostaNoDeduction = mulBp(base, tp.taxBp);
   const impostaIfAllInpsPaid = mulBp(Math.max(0, base - inpsDue), tp.taxBp);
   const totalDue = inpsDue + impostaDue;
@@ -70,7 +75,7 @@ export function estimateAnnual(state, year, today = null) {
   for (const r of state.receivables) {
     if ((r.status === 'expected' || r.status === 'partial') && r.expectedDate <= `${year}-12-31`) expectedRest += r.expectedCents - (r.receivedCents ?? 0);
   }
-  const sc = calc(ricavi + expectedRest, inpsPaid);
+  const sc = calc(ricavi + expectedRest, accrued ? null : inpsPaid);
   const scenarioTotalDue = sc.inps + sc.imposta;
   return { year, ricavi, ricaviFromApp: fromApp.ricavi, opening: op, base, inpsDue, inpsPaid, impostaDue, impostaNoDeduction, impostaIfAllInpsPaid, impostaPaid, totalDue, paid, stillDue: Math.max(0, totalDue - paid), scenario: { expectedRest, ricavi: ricavi + expectedRest, totalDue: scenarioTotalDue, stillDue: Math.max(0, scenarioTotalDue - paid) } };
 }

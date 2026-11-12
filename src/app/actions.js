@@ -570,9 +570,10 @@ export function createActions(api) {
         <div class="field-row">${field('coef', 'Coefficiente %', { value: pctStr(tp.coefficientBp), attrs: 'inputmode="decimal"' })}${field('inps', 'Contributi INPS %', { value: pctStr(tp.inpsBp), attrs: 'inputmode="decimal"' })}</div>
         ${field('tax', 'Imposta sostitutiva %', { value: pctStr(tp.taxBp), attrs: 'inputmode="decimal"' })}
         ${select('round', 'Arrotonda l\'accantonamento a', [['100', '1 €'], ['500', '5 €'], ['1000', '10 €'], ['5000', '50 €']], String(tp.roundStepCents))}
-        <div class="note">Imponibile = incasso × coefficiente. Contributi = imponibile × aliquota INPS. Imposta = imponibile × aliquota. Per singola fattura <b>non</b> si applicano deduzioni; la deduzione dei contributi versati si calcola sul totale annuale. Verifica i valori con il tuo commercialista.</div>`,
+        ${select('ded', 'Contributi nel calcolo dell\'imposta', [['accrued', 'Maturati: imposta su (reddito − INPS)'], ['paid', 'Solo versati (più prudente)']], tp.inpsDeduction ?? 'accrued', { hint: 'Predefinito: imposta = (reddito − INPS) × aliquota. "Solo versati" deduce i contributi solo quando li hai pagati davvero.' })}
+        <div class="note">Reddito = incasso × coefficiente · INPS = reddito × aliquota INPS · imposta = (reddito − INPS) × aliquota (metodo "maturati").</div>`,
       onSubmit: async (v) => {
-        await api.commit((s, c) => C.setTaxProfile(s, c, { enabled: v.enabled === 'on', fundId: v.fund || null, coefficientBp: bpOf(v.coef, 'Coefficiente'), inpsBp: bpOf(v.inps, 'Contributi'), taxBp: bpOf(v.tax, 'Imposta'), roundStepCents: Number(v.round) }));
+        await api.commit((s, c) => C.setTaxProfile(s, c, { enabled: v.enabled === 'on', fundId: v.fund || null, coefficientBp: bpOf(v.coef, 'Coefficiente'), inpsBp: bpOf(v.inps, 'Contributi'), taxBp: bpOf(v.tax, 'Imposta'), roundStepCents: Number(v.round), inpsDeduction: v.ded || 'accrued' }));
       },
     });
   }

@@ -185,6 +185,7 @@ export function validateState(st) {
     if (tp.fundId != null && !has('funds', tp.fundId)) bad('profilo fiscale: fondo inesistente');
     if (tp.verifiedYear != null && !Number.isInteger(tp.verifiedYear)) bad('profilo fiscale: anno di verifica non valido');
     if (tp.enabled && tp.fundId == null) bad('profilo fiscale attivo senza fondo di destinazione');
+    if (!['accrued', 'paid'].includes(tp.inpsDeduction)) bad('profilo fiscale: metodo di deduzione non valido');
     const o = tp.opening;
     if (o != null && !(Number.isInteger(o.year) && isIso(o.untilDate) && o.untilDate.startsWith(String(o.year)) && [o.ricaviCents, o.inpsPaidCents, o.impostaPaidCents].every((x) => Number.isInteger(x) && x >= 0))) bad('profilo fiscale: dati iniziali dell\'anno non validi');
   }

@@ -33,7 +33,7 @@ export const DEFAULT_CATEGORIES = [
 
 /** Profilo fiscale: lavoratore autonomo in regime forfettario con Gestione Separata INPS. Tutti i valori sono modificabili. */
 export function defaultTaxProfile() {
-  return { enabled: false, coefficientBp: 7800, inpsBp: 2607, taxBp: 500, roundStepCents: 1000, fundId: null, verifiedYear: null, opening: null };
+  return { enabled: false, coefficientBp: 7800, inpsBp: 2607, taxBp: 500, roundStepCents: 1000, fundId: null, verifiedYear: null, opening: null, inpsDeduction: 'accrued' };
 }
 
 export function defaultSettings(today) {
@@ -107,6 +107,7 @@ export function migrateState(st) {
   for (const t of st.invoiceTemplates ?? []) { t.reserveCents ??= null; t.review ??= false; t.note ??= ''; t.origin ??= null; }
   st.settings.taxProfile.verifiedYear ??= null;
   st.settings.taxProfile.opening ??= null;
+  st.settings.taxProfile.inpsDeduction ??= 'accrued';
   if (st.settings.budget) { st.settings.budget.accountId ??= null; st.settings.budget.fundId ??= null; st.settings.budget.lastFundedWeek ??= null; }
   for (const p of st.planned ?? []) { p.categoryId ??= 'cat_other'; p.autoPay ??= false; p.remindDays ??= 2; p.confirm ??= null; p.origin ??= null; p.toAccountId ??= null; p.autoExecute ??= false; }
   return st;
