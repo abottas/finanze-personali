@@ -325,3 +325,5 @@ button.item:active { opacity: .6; }
 .row2 { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; } .row2 b { font-variant-numeric: tabular-nums; font-weight: 600; }
 .row2.strong { font-weight: 700; } .row2.strong b { font-weight: 800; } .row2.neg b { color: var(--neg); }
 .sep { height: 1px; background: var(--line); margin: 8px 0; }
+/* Le caselle di spunta dentro un .field non devono ereditare lo stile dei campi di testo (appearance:none le rende invisibili) */
+.field .check input[type=checkbox] { appearance: auto; -webkit-appearance: checkbox; width: 22px; height: 22px; min-height: 0; padding: 0; border: 0; background: none; border-radius: 4px; }
