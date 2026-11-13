@@ -12,8 +12,8 @@ export function field(name, label, { value = '', type = 'text', hint = '', attrs
 export function moneyField(name, label, cents = null, { hint = '', cls = '', required = true } = {}) {
   return html`<label class="field ${cls}"><span>${label}</span><input class="money" name="${name}" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${cents == null ? '' : toInputValue(Math.abs(cents))}" ${required ? raw('required') : ''}>${hint ? html`<small class="hint">${hint}</small>` : ''}</label>`;
 }
-export function select(name, label, options, selected = '', { cls = '', hint = '' } = {}) {
-  return html`<label class="field ${cls}"><span>${label}</span><select name="${name}">${options.map(([v, t]) => html`<option value="${v}" ${String(v) === String(selected) ? raw('selected') : ''}>${t}</option>`)}</select>${hint ? html`<small class="hint">${hint}</small>` : ''}</label>`;
+export function select(name, label, options, selected = '', { cls = '', hint = '', change = '' } = {}) {
+  return html`<label class="field ${cls}"><span>${label}</span><select name="${name}" ${change ? raw(`data-change="${change}"`) : ''}>${options.map(([v, t]) => html`<option value="${v}" ${String(v) === String(selected) ? raw('selected') : ''}>${t}</option>`)}</select>${hint ? html`<small class="hint">${hint}</small>` : ''}</label>`;
 }
 export function segmented(name, options, selected, dataSet = null) {
   return html`<div class="seg" role="radiogroup">${options.map(([v, t]) => html`<label><input type="radio" name="${name}" value="${v}" ${v === selected ? raw('checked') : ''} ${dataSet ? raw(`data-sets="${dataSet}"`) : ''}><span>${t}</span></label>`)}</div>`;

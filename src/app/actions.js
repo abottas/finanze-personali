@@ -18,6 +18,7 @@ import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { runIntegrityChecks } from '../core/integrity.js';
 import { estimateTaxes, grossForNet } from '../core/tax.js';
 import { aiExportJson } from '../core/export-ai.js';
+import { budgetStatus } from '../core/budget.js';
 import { situationCsv, statsCsv, forecastSummaryCsv, forecastDetailCsv } from '../core/reports.js';
 
 const ACC_TYPES = [['checking', 'Conto corrente'], ['savings', 'Risparmio'], ['cash', 'Contanti'], ['investment', 'Investimento (PAC) · non è liquidità'], ['other', 'Altro']];
@@ -83,13 +84,14 @@ export function createActions(api) {
       body: html`${segmented('kind', [['expense', 'Uscita'], ['income', 'Entrata'], ['transfer', 'Trasferimento']], kind, 'kind')}
         ${moneyField('amount', 'Importo', pre.amount ?? null)}
         ${field('date', 'Data', { type: 'date', value: app.today, attrs: `max="${app.today}" required` })}
-        ${select('account', 'Conto', first, first[0]?.[0], { cls: 'not-transfer' })}
+        ${select('account', 'Conto', first, first[0]?.[0], { cls: 'not-transfer', change: 'tx-budget-hint' })}
         <div class="only-transfer"><div class="field-row">${select('from', 'Da', accOptsAny(), pre.from ?? first[0]?.[0])}${select('to', 'A', accOptsAny(), pre.to ?? first[1]?.[0] ?? first[0]?.[0])}</div>
           <div class="note">Un trasferimento sposta denaro tra i tuoi conti: non è un'entrata né una spesa.</div>
           ${select('purpose', 'Scopo', [['', 'Nessuno'], ['saving', 'Risparmio']], '')}</div>
-        ${select('catExpense', 'Categoria', catOpts('expense'), 'cat_other', { cls: 'only-expense' })}
+        ${select('catExpense', 'Categoria', catOpts('expense'), 'cat_other', { cls: 'only-expense', change: 'tx-budget-hint' })}
+        <div class="small only-expense" id="budget-hint" aria-live="polite"></div>
         ${select('catIncome', 'Categoria', catOpts('income'), 'cat_in_other', { cls: 'only-income' })}
-        ${select('fund', 'Paga da un fondo (opzionale)', fundOpts(), '', { cls: 'only-expense', hint: 'Spendere da un fondo scala il fondo, non il budget settimanale.' })}
+        ${select('fund', 'Paga da un fondo (opzionale)', fundOpts(), '', { cls: 'only-expense', change: 'tx-budget-hint', hint: 'Spendere da un fondo scala il fondo, non il budget settimanale.' })}
         ${field('note', 'Nota', { attrs: 'maxlength="200"', cls: 'not-transfer' })}
         <div class="only-transfer">${field('note2', 'Nota')}</div>`,
       onSubmit: async (v) => {
@@ -100,7 +102,28 @@ export function createActions(api) {
           await api.commit((s, c) => C.addTransaction(s, c, { accountId: v.account, date: v.date, cents: v.kind === 'expense' ? -cents : cents, kind: v.kind, categoryId: v.kind === 'expense' ? v.catExpense : v.catIncome, fundId: v.kind === 'expense' && v.fund ? v.fund : null, note: v.note }));
         }
         api.toast('Movimento registrato');
+        if (v.kind === 'expense' && snap().freeByAccount[v.account] < 0) overboundSheet(v.account);
       },
+    });
+    setTimeout(() => changes['tx-budget-hint']?.({ form: document.querySelector('form.sheet') }), 0);
+  }
+  /** Dopo una spesa che porta il libero di un conto sotto zero: spiega perché e offre i rimedi immediati. */
+  function overboundSheet(accountId) {
+    const S = st(), sn = snap(), acc = S.accounts.find((a) => a.id === accountId);
+    const b = S.settings.budget;
+    const pend = pendingTransfers(S, sn).filter((p) => p.toAccountId === accountId);
+    const res = S.funds.map((f) => [f, sn.funds[f.id].byAccount[accountId] ?? 0]).filter(([, c]) => c > 0);
+    const nm = (id) => S.accounts.find((a) => a.id === id)?.name;
+    api.openSheet({
+      title: `${acc.name}: vincolato oltre il saldo`, submit: null, cancel: 'Chiudi',
+      body: html`<div class="alert high">${I.warn}<span>Dopo questa spesa su <b>${acc.name}</b> il saldo è ${formatEuro(sn.balances[accountId])} e i soldi vincolati a fondi sono ${formatEuro(sn.reservedByAccount[accountId] ?? 0)}: il libero risulta ${formatEuro(sn.freeByAccount[accountId])}.</span></div>
+        <div class="section-title">Perché</div>
+        <ul class="list">${res.map(([f, c]) => html`<li class="item"><span class="tile sm col-${f.color}">${f.icon}</span><div class="grow"><div class="t">${f.name}</div></div><div class="r num">${formatEuro(c)}</div></li>`)}</ul>
+        ${pend.length ? html`<div class="section-title">Hai già fatto il bonifico?</div><div class="small muted">Se i soldi sono arrivati in banca ma l'app non lo sa, il saldo qui è più basso del vero. Confermalo e i saldi si allineano.</div>
+          ${pend.map((p) => html`<div class="dueitem"><div class="grow"><div class="t">${nm(p.fromAccountId)} → ${nm(p.toAccountId)}</div></div><div class="r num">${formatEuro(p.cents)}</div><button class="btn sm primary inline" data-action="confirm-transfer" data-fund="${p.fundId}" data-from="${p.fromAccountId}" data-to="${p.toAccountId}" data-cents="${p.cents}">Fatto</button></div>`)}` : ''}
+        ${b.fundId && b.accountId !== accountId && b.weeklyCents > 0 ? html`<div class="section-title">Budget settimanale</div><div class="small">Il conto spese del budget è <b>${nm(b.accountId)}</b>, non ${acc.name}: le spese fatte qui non consumano il fondo della settimana. Se spendi da ${acc.name}, impostalo come conto spese.</div>
+          <button class="btn block mt8" data-action="budget-account-set" data-acc="${accountId}">Imposta ${acc.name} come conto spese del budget</button>` : ''}
+        <div class="note">La spesa è stata registrata: nulla è perso. Puoi anche modificarla (Movimenti → tocca la spesa) o rilasciare un fondo dal suo dettaglio.</div>`,
     });
   }
   function txDetail(id) {
@@ -788,6 +811,10 @@ export function createActions(api) {
       });
     },
     'planned-funding-now': () => runPlannedNow(),
+    'budget-account-set': async (el) => {
+      await api.commit((s, c) => C.setBudgetAccount(s, c, { accountId: el.dataset.acc }));
+      api.closeSheet?.(); api.toast('Conto spese del budget cambiato');
+    },
     'budget-account': () => {
       const b = st().settings.budget;
       const opts = accOpts().filter(([id]) => id !== b.accountId && !(b.advanceWeeks > 0 && id === b.sourceAccountId));
@@ -919,6 +946,21 @@ export function createActions(api) {
       const t = estimateTaxes(gross, tp);
       set('gross', formatEuro(gross)); set('base', formatEuro(t.base)); set('inps', formatEuro(t.inps)); set('imp', formatEuro(t.imposta));
       set('tax', formatEuro(t.total)); set('net', formatEuro(t.netAfter)); set('pct', (t.total / gross * 100).toFixed(1).replace('.', ',') + '%');
+    },
+    'tx-budget-hint': (el) => {
+      const f = el.form; if (!f) return;
+      const box = f.querySelector('#budget-hint'); if (!box) return;
+      const S = st(), b = S.settings.budget;
+      const isExpense = (f.dataset.kind ?? 'expense') === 'expense';
+      const set = (txt, cls) => { box.textContent = txt; box.className = `small only-expense ${cls}`; };
+      if (!isExpense || !b.fundId || b.weeklyCents <= 0) { set('', ''); return; }
+      const acc = f.elements.account?.value, cat = f.elements.catExpense?.value, fund = f.elements.fund?.value;
+      const name = (id) => S.accounts.find((a) => a.id === id)?.name ?? '';
+      const bs = budgetStatus(S, app.today);
+      if (fund) set('Pagata dal fondo scelto: non consuma il budget settimanale.', 'muted');
+      else if (S.categories.find((c) => c.id === cat)?.inBudget === false) set('Categoria fuori dal budget settimanale: non lo consuma.', 'muted');
+      else if (acc !== b.accountId) set(`Questo non è il conto spese del budget (${name(b.accountId)}): non consumerà la settimana corrente.`, 'warn-t');
+      else set(`Conta nel budget settimanale: consuma la settimana corrente (restano ${formatEuro(bs.remainingCents)}).`, 'pos');
     },
     'situation-date': (el) => { if (el.value) { app.ui.situationUntil = el.value; api.render(); } },
     'reserve-choice': (el) => { const i = el.form.elements.a0; if (i) i.value = el.dataset.amount; },
