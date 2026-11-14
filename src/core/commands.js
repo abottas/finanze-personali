@@ -11,7 +11,7 @@ import { COLOR_KEYS, BANKS } from './palette.js';
 import { snapshot, balanceOf } from './derive.js';
 import { validateState } from './validate.js';
 import { appendAudit } from './audit.js';
-import { budgetTargetLevel } from './budget.js';
+import { budgetTargetLevel, countsInWeeklyBudget } from './budget.js';
 import { validateProfile } from './profile.js';
 
 async function mutate(state, ctx, fn) {
@@ -120,10 +120,10 @@ function syncRefill(s, t, log) {
   if (wantId) { t.refillFundId = wantId; t.refillCents = want; } else { delete t.refillFundId; delete t.refillCents; }
 }
 
-export function addTransaction(state, ctx, { accountId, date = ctx.today, cents, kind, categoryId = null, fundId = null, note = '', receivableId = null, plannedId = null }) {
+export function addTransaction(state, ctx, { accountId, date = ctx.today, cents, kind, categoryId = null, fundId = null, note = '', receivableId = null, plannedId = null, weeklyBudget = null }) {
   return mutate(state, ctx, (s, log) => {
     req(['income', 'expense', 'investment', 'adjustment'].includes(kind), 'tipo', 'Tipo di movimento non valido');
-    const t = { id: ctx.newId(), accountId, date, cents, kind, categoryId, fundId, receivableId, plannedId, note: cleanNote(note), status: 'posted', voidReason: null, createdAt: ctx.nowIso, updatedAt: ctx.nowIso };
+    const t = { id: ctx.newId(), accountId, date, cents, kind, categoryId, fundId, receivableId, plannedId, note: cleanNote(note), status: 'posted', voidReason: null, createdAt: ctx.nowIso, updatedAt: ctx.nowIso, weeklyBudget: kind === 'expense' && typeof weeklyBudget === 'boolean' ? weeklyBudget : null };
     checkTxFields(s, ctx, t);
     s.transactions.push(t);
     syncRefill(s, t, log);
@@ -143,17 +143,40 @@ export function addTransaction(state, ctx, { accountId, date = ctx.today, cents,
 function linkBudget(s, ctx, t, log) {
   const b = s.settings.budget;
   if (!b.fundId || !b.accountId || b.weeklyCents <= 0 || t.kind !== 'expense' || t.fundId || t.plannedId) return;
-  if (t.accountId !== b.accountId || t.date < b.startDate || t.date < weekStart(ctx.today, s.settings.weekStartsOn)) return;
-  if (s.categories.find((c) => c.id === t.categoryId)?.inBudget === false) return;
+  if (t.date < b.startDate || t.date < weekStart(ctx.today, s.settings.weekStartsOn)) return;
+  if (!countsInWeeklyBudget(s, t)) return;
   const fund = s.funds.find((f) => f.id === b.fundId);
   if (!fund || fund.archived) return;
   const amount = -t.cents;
   const avail = snapshot(s).funds[fund.id].byAccount[b.accountId] ?? 0;
+  if (t.accountId !== b.accountId) {
+    // Spesa di un ALTRO conto segnata come "budget settimanale": il fondo non può pagarla (il denaro esce da un altro conto),
+    // ma la settimana la conta: si libera la riserva sul conto spese (quel denaro resta lì, ora libero). Reversibile.
+    const rel = Math.min(avail, amount);
+    if (rel > 0) {
+      const al = pushAllocation(s, ctx, fund.id, -rel, 'release', 'Spesa budget da un altro conto', null, b.accountId);
+      t.budgetReleaseCents = rel;
+      log('release', 'allocation', al.id, null, al, `Spesa del budget pagata da un altro conto: liberati ${formatEuro(rel)} sul conto spese`);
+    }
+    return;
+  }
   if (avail >= amount) { t.fundId = fund.id; return; }
   if (avail > 0) {
     // Sforo: la parte coperta dal fondo viene "consumata" liberandola, il resto era già libero.
     const al = pushAllocation(s, ctx, fund.id, -avail, 'release', 'Budget esaurito: sforo', null, b.accountId);
     log('release', 'allocation', al.id, null, al, `Sforo del budget: usati ${formatEuro(avail)} del fondo, ${formatEuro(amount - avail)} dal denaro libero`);
+  }
+}
+/** Annulla/ricalcola una spesa di altro conto che aveva liberato la riserva del budget: la riserva torna (nei limiti del libero). */
+function unreleaseBudget(s, ctx, t, log) {
+  const rel = t.budgetReleaseCents ?? 0;
+  delete t.budgetReleaseCents;
+  const b = s.settings.budget;
+  if (rel <= 0 || !b.fundId || !b.accountId || !s.funds.some((f) => f.id === b.fundId && !f.archived)) return;
+  const back = Math.min(rel, Math.max(0, snapshot(s).freeByAccount[b.accountId] ?? 0));
+  if (back > 0) {
+    const al = pushAllocation(s, ctx, b.fundId, back, 'assign', 'Spesa budget modificata o annullata: riserva ripristinata', null, b.accountId);
+    log('allocate', 'allocation', al.id, null, al, `Riserva del budget ripristinata: ${formatEuro(back)}`);
   }
 }
 
@@ -162,10 +185,12 @@ export function updateTransaction(state, ctx, id, patch) {
     const t = find(s.transactions, id, 'Movimento');
     req(t.status === 'posted', 'annullato', 'Il movimento è annullato e non modificabile');
     const before = copy(t);
-    const allowed = ['accountId', 'date', 'cents', 'categoryId', 'fundId', 'note'];
+    const allowed = ['accountId', 'date', 'cents', 'categoryId', 'fundId', 'note', 'weeklyBudget'];
     for (const k of Object.keys(patch)) {
       req(allowed.includes(k), 'campo_non_modificabile', `Campo non modificabile: ${k}`);
     }
+    if (patch.weeklyBudget !== undefined) req(patch.weeklyBudget === null || typeof patch.weeklyBudget === 'boolean', 'flag', 'Valore del flag budget non valido');
+    unreleaseBudget(s, ctx, t, log);
     // Un collegamento AUTOMATICO al fondo budget viene rifatto dopo la modifica (importo/conto/categoria possono cambiare).
     const budgetLinked = t.fundId && t.fundId === s.settings.budget.fundId && patch.fundId === undefined;
     if (budgetLinked) t.fundId = null;
@@ -183,7 +208,7 @@ export function updateTransaction(state, ctx, id, patch) {
     }
     syncRefill(s, t, log);
     log('update', 'transaction', id, before, copy(t));
-    if (budgetLinked || (!t.fundId && patch.cents !== undefined)) linkBudget(s, ctx, t, log);
+    if (budgetLinked || (!t.fundId && ['cents', 'weeklyBudget', 'accountId', 'categoryId', 'date'].some((k) => patch[k] !== undefined))) linkBudget(s, ctx, t, log);
   });
 }
 
@@ -196,6 +221,7 @@ export function voidTransaction(state, ctx, id, reason) {
     t.status = 'void';
     t.voidReason = needReason(reason);
     t.updatedAt = ctx.nowIso;
+    unreleaseBudget(s, ctx, t, log);
     syncRefill(s, t, log);
     log('void', 'transaction', id, before, copy(t), t.voidReason);
     if (t.receivableId) {

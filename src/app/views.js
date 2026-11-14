@@ -9,7 +9,7 @@ import { estimateTaxes, taxLedger } from '../core/tax.js';
 import { monthlyPace } from '../core/allocation.js';
 import { BANKS } from '../core/palette.js';
 import { snapshot, fundNeed, pendingTransfers, reserveProgress, fundProgress, childFunds } from '../core/derive.js';
-import { budgetStatus } from '../core/budget.js';
+import { budgetStatus, countsInWeeklyBudget } from '../core/budget.js';
 import { forecast, expandPlanned } from '../core/forecast.js';
 import { formatEuro } from '../core/money.js';
 import { formatDate, formatDateLong, diffDays, addDays as addDaysD } from '../core/dates.js';
@@ -246,19 +246,24 @@ export function viewMoves(app) {
       ${st.accounts.filter((a) => !a.archived).map((a) => html`<button class="chip" data-action="set-filter" data-key="moveAccount" data-v="${ui.moveAccount === a.id ? '' : a.id}" aria-pressed="${ui.moveAccount === a.id}">${a.name.replace(/ \(demo\)/, '')}</button>`)}
       <button class="chip" data-action="toggle-void" aria-pressed="${!!ui.showVoid}">Annullati</button></div>
     ${st.accounts.length === 0 ? html`<div class="card">${empty('Aggiungi prima un conto', 'I movimenti si registrano sui conti.')}<button class="btn primary block" data-action="new-account">Nuovo conto</button></div>` : groups.length === 0 ? html`<div class="card">${empty('Nessun movimento')}</div>` : groups.map((g) => html`
-      <div class="day">${formatDateLong(g.date)}</div>
-      <div class="card"><ul class="list">${g.rows.map((r) => r.type === 'tx' ? txRow(r.t, cat, accs, funds) : trRow(r.t, accs))}</ul></div>`)}
+      <div class="day"><span>${formatDateLong(g.date)}</span>${dayTotal(g.rows) ? html`<span class="num day-total">Spese ${formatEuro(-dayTotal(g.rows))}</span>` : ''}</div>
+      <div class="card"><ul class="list">${g.rows.map((r) => r.type === 'tx' ? txRow(r.t, cat, accs, funds, st) : trRow(r.t, accs))}</ul></div>`)}
     ${rows.length > shown.length ? html`<button class="btn block" data-action="more-moves">Mostra altri</button>` : ''}
     ${st.accounts.length ? html`<button class="fab" data-action="new-tx" aria-label="Nuovo movimento">${I.plus}</button>` : ''}
   </div>`;
 }
-function txRow(t, cat, accs, funds) {
+/** Totale delle spese (uscite effettive, non annullate) di un gruppo di righe dello stesso giorno. */
+const dayTotal = (rows) => rows.reduce((tot, r) => (r.type === 'tx' && r.t.status === 'posted' && r.t.kind === 'expense' ? tot + -r.t.cents : tot), 0);
+function txRow(t, cat, accs, funds, st) {
+  const wk = st.settings.budget.weeklyCents > 0 && countsInWeeklyBudget(st, t);
+  const otherFund = t.fundId && t.fundId !== st.settings.budget.fundId;
   const isIn = t.cents > 0;
   const c = t.categoryId ? cat[t.categoryId]?.name : '';
   return html`<li><button class="item ${t.status === 'void' ? 'void' : ''}" data-action="tx" data-id="${t.id}">
     ${catTile(cat[t.categoryId])}
     <div class="grow"><div class="t ellipsis">${t.note || c || (isIn ? 'Entrata' : 'Uscita')}</div>
-      <div class="s ellipsis">${accs[t.accountId]?.name.replace(/ \(demo\)/, '')}${c && t.note ? ` · ${c}` : ''}${t.fundId ? html` · ${pill('da fondo', 'acc')}` : ''}${t.kind === 'investment' ? html` · ${pill('investimento', 'acc')}` : ''}${t.kind === 'adjustment' ? html` · ${pill('rettifica', 'warn')}` : ''}${t.status === 'void' ? html` · ${pill('annullato', 'neg')}` : ''}</div></div>
+      <div class="s ellipsis">${accs[t.accountId]?.name.replace(/ \(demo\)/, '')}${c && t.note ? ` · ${c}` : ''}${t.kind === 'investment' ? html` · ${pill('investimento', 'acc')}` : ''}${t.kind === 'adjustment' ? html` · ${pill('rettifica', 'warn')}` : ''}${t.status === 'void' ? html` · ${pill('annullato', 'neg')}` : ''}</div>
+      ${otherFund || wk ? html`<div class="s pills">${otherFund ? pill('da fondo', 'acc') : ''}${wk ? pill('budget sett.', 'pos') : ''}</div>` : ''}</div>
     <div class="r num">${amt(t.cents, { tone: true, plus: isIn })}</div></button></li>`;
 }
 function trRow(t, accs) {

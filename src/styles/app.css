@@ -327,3 +327,8 @@ button.item:active { opacity: .6; }
 .sep { height: 1px; background: var(--line); margin: 8px 0; }
 /* Le caselle di spunta dentro un .field non devono ereditare lo stile dei campi di testo (appearance:none le rende invisibili) */
 .field .check input[type=checkbox] { appearance: auto; -webkit-appearance: checkbox; width: 22px; height: 22px; min-height: 0; padding: 0; border: 0; background: none; border-radius: 4px; }
+
+[hidden] { display: none !important; }
+.day { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.day .day-total { font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; font-weight: 700; color: var(--text); }
+.s.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 3px; }

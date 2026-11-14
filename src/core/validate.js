@@ -56,6 +56,7 @@ export function validateState(st) {
     else if (t.kind === 'income' && t.cents < 0) bad(`movimento ${t.id}: entrata con segno negativo`);
     else if ((t.kind === 'expense' || t.kind === 'investment') && t.cents > 0) bad(`movimento ${t.id}: uscita con segno positivo`);
     if (!['income', 'expense', 'investment', 'adjustment'].includes(t.kind)) bad(`movimento ${t.id}: tipo non valido`);
+    if (t.weeklyBudget != null && typeof t.weeklyBudget !== 'boolean') bad(`movimento ${t.id}: flag budget non valido`);
     if (!['posted', 'void'].includes(t.status)) bad(`movimento ${t.id}: stato non valido`);
     if (t.categoryId != null && !has('categories', t.categoryId)) bad(`movimento ${t.id}: categoria inesistente`);
     if (t.fundId != null) {

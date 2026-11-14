@@ -4,10 +4,26 @@
 // (affitto, abbonamenti… sono impegni a parte) e non pagate da un altro fondo.
 import { addDays, weekStart } from './dates.js';
 
+/**
+ * Una spesa CONTA nel budget settimanale? Fonte unica per il calcolo e per le etichette.
+ *  • flag esplicito (t.weeklyBudget): true = conta (da qualsiasi conto o categoria), false = non conta;
+ *  • senza flag (automatico): conta se la categoria è "nel budget" e, con il budget finanziato, se esce dal CONTO SPESE
+ *    (senza finanziamento il budget è un semplice tetto e vale per tutti i conti);
+ *  • mai: scadenze programmate e spese pagate da un altro fondo.
+ */
+export function countsInWeeklyBudget(state, t) {
+  if (t.status !== 'posted' || t.kind !== 'expense' || t.plannedId) return false;
+  const b = state.settings.budget;
+  if (t.fundId && t.fundId !== b.fundId) return false;
+  if (t.weeklyBudget === true) return true;
+  if (t.weeklyBudget === false) return false;
+  if (state.categories.find((c) => c.id === t.categoryId)?.inBudget === false) return false;
+  return !b.accountId || t.accountId === b.accountId;
+}
+
 export function budgetStatus(state, today) {
   const b = state.settings.budget;
   const startsOn = state.settings.weekStartsOn;
-  const cat = Object.fromEntries(state.categories.map((c) => [c.id, c]));
   const out = { started: false, weekStart: weekStart(today, startsOn), weekEnd: null, baseCents: b.weeklyCents, carryCents: 0, spentCents: 0, remainingCents: 0, weeks: [] };
   out.weekEnd = addDays(out.weekStart, 6);
   if (b.weeklyCents <= 0 || today < b.startDate) return out;
@@ -15,9 +31,7 @@ export function budgetStatus(state, today) {
 
   const spentByWeek = new Map();
   for (const t of state.transactions) {
-    if (t.status !== 'posted' || t.kind !== 'expense' || t.plannedId) continue;
-    if (t.fundId && t.fundId !== b.fundId) continue;     // pagata da un altro fondo: non pesa sul budget
-    if (cat[t.categoryId]?.inBudget === false) continue;
+    if (!countsInWeeklyBudget(state, t)) continue;
     if (t.date < b.startDate || t.date > today) continue;
     const ws = weekStart(t.date, startsOn);
     spentByWeek.set(ws, (spentByWeek.get(ws) ?? 0) - t.cents);

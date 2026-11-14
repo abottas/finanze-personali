@@ -915,6 +915,9 @@
     "note": "Cliente Alfa — Fattura ottobre",
     "status": "posted",
     "voidReason": null,
+    "weeklyBudgetFlag": null,
+    "countsInWeeklyBudget": false,
+    "budgetReserveReleasedCents": null,
     "refillFundId": null,
     "refillCents": null
    },
@@ -932,6 +935,9 @@
     "note": "Spesa settimanale",
     "status": "posted",
     "voidReason": null,
+    "weeklyBudgetFlag": null,
+    "countsInWeeklyBudget": true,
+    "budgetReserveReleasedCents": null,
     "refillFundId": null,
     "refillCents": null
    },
@@ -949,6 +955,9 @@
     "note": "Abbonamento software",
     "status": "posted",
     "voidReason": null,
+    "weeklyBudgetFlag": null,
+    "countsInWeeklyBudget": false,
+    "budgetReserveReleasedCents": null,
     "refillFundId": null,
     "refillCents": null
    },
@@ -966,6 +975,9 @@
     "note": "Cena",
     "status": "posted",
     "voidReason": null,
+    "weeklyBudgetFlag": null,
+    "countsInWeeklyBudget": true,
+    "budgetReserveReleasedCents": null,
     "refillFundId": null,
     "refillCents": null
    }

@@ -18,7 +18,7 @@ import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { runIntegrityChecks } from '../core/integrity.js';
 import { estimateTaxes, grossForNet } from '../core/tax.js';
 import { aiExportJson } from '../core/export-ai.js';
-import { budgetStatus } from '../core/budget.js';
+import { budgetStatus, countsInWeeklyBudget } from '../core/budget.js';
 import { situationCsv, statsCsv, forecastSummaryCsv, forecastDetailCsv } from '../core/reports.js';
 
 const ACC_TYPES = [['checking', 'Conto corrente'], ['savings', 'Risparmio'], ['cash', 'Contanti'], ['investment', 'Investimento (PAC) · non è liquidità'], ['other', 'Altro']];
@@ -50,6 +50,7 @@ export function createActions(api) {
   void 0;
   const fundOpts = () => [['', 'Nessuno'], ...st().funds.filter((f) => !f.archived).map((f) => [f.id, `${f.name} · ${st().accounts.find((a) => a.id === f.accountId)?.name ?? ''}`])];
   const snap = () => snapshot(st());
+  const budgetOn = () => !!st().settings.budget.fundId && st().settings.budget.weeklyCents > 0;   // budget finanziato: la spunta è esplicita
 
   // ───────────── Conti ─────────────
   function accountSheet(a = null) {
@@ -89,6 +90,7 @@ export function createActions(api) {
           <div class="note">Un trasferimento sposta denaro tra i tuoi conti: non è un'entrata né una spesa.</div>
           ${select('purpose', 'Scopo', [['', 'Nessuno'], ['saving', 'Risparmio']], '')}</div>
         ${select('catExpense', 'Categoria', catOpts('expense'), 'cat_other', { cls: 'only-expense', change: 'tx-budget-hint' })}
+        <label class="check only-expense" id="wb-row" hidden><input type="checkbox" name="wb" data-change="tx-wb-touch"><span>Conta nel budget settimanale</span></label>
         <div class="small only-expense" id="budget-hint" aria-live="polite"></div>
         ${select('catIncome', 'Categoria', catOpts('income'), 'cat_in_other', { cls: 'only-income' })}
         ${select('fund', 'Paga da un fondo (opzionale)', fundOpts(), '', { cls: 'only-expense', change: 'tx-budget-hint', hint: 'Spendere da un fondo scala il fondo, non il budget settimanale.' })}
@@ -99,7 +101,7 @@ export function createActions(api) {
         if (v.kind === 'transfer') {
           await api.commit((s, c) => C.addTransfer(s, c, { fromAccountId: v.from, toAccountId: v.to, cents, date: v.date, note: v.note2, purpose: v.purpose || null }));
         } else {
-          await api.commit((s, c) => C.addTransaction(s, c, { accountId: v.account, date: v.date, cents: v.kind === 'expense' ? -cents : cents, kind: v.kind, categoryId: v.kind === 'expense' ? v.catExpense : v.catIncome, fundId: v.kind === 'expense' && v.fund ? v.fund : null, note: v.note }));
+          await api.commit((s, c) => C.addTransaction(s, c, { accountId: v.account, date: v.date, cents: v.kind === 'expense' ? -cents : cents, kind: v.kind, categoryId: v.kind === 'expense' ? v.catExpense : v.catIncome, fundId: v.kind === 'expense' && v.fund && v.fund !== st().settings.budget.fundId ? v.fund : null, weeklyBudget: v.kind === 'expense' && budgetOn() && !(v.fund && v.fund !== st().settings.budget.fundId) ? v.wb === 'on' : null, note: v.note }));
         }
         api.toast('Movimento registrato');
         if (v.kind === 'expense' && snap().freeByAccount[v.account] < 0) overboundSheet(v.account);
@@ -136,7 +138,7 @@ export function createActions(api) {
     api.openSheet({
       title: t.status === 'void' ? 'Movimento annullato' : t.kind === 'income' ? 'Entrata' : t.kind === 'adjustment' ? 'Rettifica' : 'Uscita', submit: null, cancel: 'Chiudi',
       body: html`<div class="card"><div class="big num stat-big">${amt(t.cents, { tone: true, plus: t.cents > 0 })}</div>
-        <div class="kv mt12"><span class="k">Data</span><span>${formatDateLong(t.date)}</span><span class="k">Conto</span><span>${acc}</span>${cat ? html`<span class="k">Categoria</span><span>${cat}</span>` : ''}${fund ? html`<span class="k">Pagato dal fondo</span><span>${fund}</span>` : ''}${t.note ? html`<span class="k">Nota</span><span>${t.note}</span>` : ''}${t.status === 'void' ? html`<span class="k">Motivo annullamento</span><span>${t.voidReason}</span>` : ''}</div></div>
+        <div class="kv mt12"><span class="k">Data</span><span>${formatDateLong(t.date)}</span><span class="k">Conto</span><span>${acc}</span>${cat ? html`<span class="k">Categoria</span><span>${cat}</span>` : ''}${fund && t.fundId !== st().settings.budget.fundId ? html`<span class="k">Pagato dal fondo</span><span>${fund}</span>` : ''}${t.kind === 'expense' && budgetOn() ? html`<span class="k">Budget settimanale</span><span>${countsInWeeklyBudget(st(), t) ? 'conta' : 'non conta'}${t.fundId === st().settings.budget.fundId ? ' · scalato dal fondo' : t.budgetReleaseCents ? ` · liberati ${formatEuro(t.budgetReleaseCents)} sul conto spese` : ''}</span>` : ''}${t.note ? html`<span class="k">Nota</span><span>${t.note}</span>` : ''}${t.status === 'void' ? html`<span class="k">Motivo annullamento</span><span>${t.voidReason}</span>` : ''}</div></div>
         ${t.status === 'posted' ? html`<div class="btn-row"><button class="btn" data-action="edit-tx" data-id="${t.id}">Modifica</button><button class="btn danger" data-action="void-tx" data-id="${t.id}">Annulla</button></div>` : ''}
         ${lines.length ? html`<div class="section-title">Cronologia</div><div class="card hist"><ul class="list">${lines.map((e) => html`<li class="item"><div class="grow"><div class="t">${e.action} · ${e.ts.slice(0, 16).replace('T', ' ')}</div>${e.note ? html`<div class="s">${e.note}</div>` : ''}</div></li>`)}</ul></div>` : ''}`,
     });
@@ -146,18 +148,24 @@ export function createActions(api) {
     api.openSheet({
       title: 'Modifica movimento', submit: 'Salva modifica',
       body: html`${moneyField('amount', 'Importo', t.cents)}${field('date', 'Data', { type: 'date', value: t.date, attrs: `max="${app.today}" required` })}
-        ${select('account', 'Conto', accOpts(), t.accountId)}${t.kind !== 'adjustment' ? select('cat', 'Categoria', catOpts(t.kind), t.categoryId ?? '') : ''}
-        ${t.kind === 'expense' ? select('fund', 'Fondo', fundOpts(), t.fundId ?? '') : ''}${field('note', 'Nota', { value: t.note, attrs: 'maxlength="200"' })}
+        ${select('account', 'Conto', accOpts(), t.accountId, { change: 'tx-budget-hint' })}${t.kind !== 'adjustment' ? select('cat', 'Categoria', catOpts(t.kind), t.categoryId ?? '', { change: 'tx-budget-hint' }) : ''}
+        ${t.kind === 'expense' ? select('fund', 'Fondo', fundOpts(), t.fundId && t.fundId !== st().settings.budget.fundId ? t.fundId : '', { change: 'tx-budget-hint' }) : ''}
+        ${t.kind === 'expense' ? html`<label class="check" id="wb-row" ${budgetOn() ? '' : raw('hidden')}><input type="checkbox" name="wb" data-change="tx-wb-touch" data-explicit="${t.weeklyBudget != null ? '1' : ''}" ${countsInWeeklyBudget(st(), t) ? raw('checked') : ''}><span>Conta nel budget settimanale</span></label><div class="small" id="budget-hint" aria-live="polite"></div>` : ''}${field('note', 'Nota', { value: t.note, attrs: 'maxlength="200"' })}
         <div class="note">Ogni modifica resta nello storico con il valore prima e dopo.</div>`,
       onSubmit: async (v) => {
         const c = money(v.amount);
         const patch = { cents: t.kind === 'expense' ? -c : t.kind === 'income' ? c : (t.cents < 0 ? -c : c), date: v.date, accountId: v.account, note: v.note };
         if (t.kind !== 'adjustment') patch.categoryId = v.cat;
-        if (t.kind === 'expense') patch.fundId = v.fund || null;
+        if (t.kind === 'expense') {
+          const other = v.fund && v.fund !== st().settings.budget.fundId ? v.fund : null;   // il fondo budget si collega da solo con la spunta
+          patch.fundId = other;
+          if (budgetOn()) patch.weeklyBudget = other ? null : v.wb === 'on';
+        }
         await api.commit((s, cx) => C.updateTransaction(s, cx, id, patch));
         api.toast('Movimento aggiornato');
       },
     });
+    setTimeout(() => changes['tx-budget-hint']?.({ form: document.querySelector('form.sheet') }), 0);
   }
   function reasonSheet(title, text, onDone, label = 'Annulla movimento') {
     api.openSheet({
@@ -947,20 +955,27 @@ export function createActions(api) {
       set('gross', formatEuro(gross)); set('base', formatEuro(t.base)); set('inps', formatEuro(t.inps)); set('imp', formatEuro(t.imposta));
       set('tax', formatEuro(t.total)); set('net', formatEuro(t.netAfter)); set('pct', (t.total / gross * 100).toFixed(1).replace('.', ',') + '%');
     },
+    'tx-wb-touch': (el) => { if (el.form) el.form.dataset.wbTouched = '1'; changes['tx-budget-hint']({ form: el.form }); },
     'tx-budget-hint': (el) => {
       const f = el.form; if (!f) return;
-      const box = f.querySelector('#budget-hint'); if (!box) return;
+      const box = f.querySelector('#budget-hint'), row = f.querySelector('#wb-row'), wb = f.elements.wb;
+      if (!box || !row || !wb) return;
       const S = st(), b = S.settings.budget;
       const isExpense = (f.dataset.kind ?? 'expense') === 'expense';
-      const set = (txt, cls) => { box.textContent = txt; box.className = `small only-expense ${cls}`; };
-      if (!isExpense || !b.fundId || b.weeklyCents <= 0) { set('', ''); return; }
-      const acc = f.elements.account?.value, cat = f.elements.catExpense?.value, fund = f.elements.fund?.value;
+      const set = (txt, cls) => { box.textContent = txt; box.className = `small ${f.dataset.kind !== undefined ? 'only-expense ' : ''}${cls}`; };
+      if (!isExpense || !budgetOn()) { row.hidden = true; set('', ''); return; }
+      row.hidden = false;
+      const acc = f.elements.account?.value, cat = (f.elements.catExpense ?? f.elements.cat)?.value;
+      const fund = f.elements.fund?.value;
+      const otherFund = !!fund && fund !== b.fundId;
       const name = (id) => S.accounts.find((a) => a.id === id)?.name ?? '';
-      const bs = budgetStatus(S, app.today);
-      if (fund) set('Pagata dal fondo scelto: non consuma il budget settimanale.', 'muted');
-      else if (S.categories.find((c) => c.id === cat)?.inBudget === false) set('Categoria fuori dal budget settimanale: non lo consuma.', 'muted');
-      else if (acc !== b.accountId) set(`Questo non è il conto spese del budget (${name(b.accountId)}): non consumerà la settimana corrente.`, 'warn-t');
-      else set(`Conta nel budget settimanale: consuma la settimana corrente (restano ${formatEuro(bs.remainingCents)}).`, 'pos');
+      if (otherFund) { wb.disabled = true; wb.checked = false; set('Pagata da un altro fondo: non tocca il budget settimanale.', 'muted'); return; }
+      wb.disabled = false;
+      if (!f.dataset.wbTouched && !wb.dataset.explicit) wb.checked = S.categories.find((c) => c.id === cat)?.inBudget !== false && acc === b.accountId;
+      if (!wb.checked) { set('Non conta nel budget settimanale.', 'muted'); return; }
+      const rem = budgetStatus(S, app.today).remainingCents;
+      if (acc === b.accountId) set(`Consuma la settimana corrente (prima di questa spesa restano ${formatEuro(rem)}).`, 'pos');
+      else set(`Conta nel budget anche se esce da ${name(acc)}: la riserva su ${name(b.accountId)} si riduce di pari importo e quel denaro resta libero lì.`, 'warn-t');
     },
     'situation-date': (el) => { if (el.value) { app.ui.situationUntil = el.value; api.render(); } },
     'reserve-choice': (el) => { const i = el.form.elements.a0; if (i) i.value = el.dataset.amount; },

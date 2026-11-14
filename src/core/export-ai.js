@@ -5,6 +5,7 @@
 // Esclusi per costruzione: password, chiavi di cifratura, IBAN (il modello non li contiene), loghi, registro modifiche.
 import { snapshot, pendingTransfers, fundTarget, fundNeed, reserveProgress, childFunds } from './derive.js';
 import { forecast } from './forecast.js';
+import { countsInWeeklyBudget } from './budget.js';
 import { budgetStatus } from './budget.js';
 import { taxLedger } from './tax.js';
 import { monthlySeries } from './analytics.js';
@@ -138,7 +139,7 @@ export function buildAiExport(state, { today, nowIso, appVersion = null }) {
   // ───────── Movimenti effettivi (registri, ciascuno una sola volta) ─────────
   const movements = {
     note: 'Registri effettivi: ogni movimento compare una sola volta. I trasferimenti non sono entrate né uscite; le allocazioni sono vincoli virtuali (non muovono denaro in banca).',
-    transactions: state.transactions.map((t) => ({ id: t.id, date: t.date, accountId: t.accountId, kind: t.kind, amountCents: t.cents, categoryId: t.categoryId ?? null, categoryName: catById[t.categoryId]?.name ?? null, fundId: t.fundId ?? null, plannedId: t.plannedId ?? null, receivableId: t.receivableId ?? null, note: t.note || null, status: t.status, voidReason: t.voidReason ?? null, refillFundId: t.refillFundId ?? null, refillCents: t.refillCents ?? null })),
+    transactions: state.transactions.map((t) => ({ id: t.id, date: t.date, accountId: t.accountId, kind: t.kind, amountCents: t.cents, categoryId: t.categoryId ?? null, categoryName: catById[t.categoryId]?.name ?? null, fundId: t.fundId ?? null, plannedId: t.plannedId ?? null, receivableId: t.receivableId ?? null, note: t.note || null, status: t.status, voidReason: t.voidReason ?? null, weeklyBudgetFlag: t.weeklyBudget ?? null, countsInWeeklyBudget: countsInWeeklyBudget(state, t), budgetReserveReleasedCents: t.budgetReleaseCents ?? null, refillFundId: t.refillFundId ?? null, refillCents: t.refillCents ?? null })),
     transfers: state.transfers.map((t) => ({ id: t.id, date: t.date, fromAccountId: t.fromAccountId, toAccountId: t.toAccountId, amountCents: t.cents, purpose: t.purpose ?? null, fundId: t.fundId ?? null, plannedId: t.plannedId ?? null, note: t.note || null, status: t.status, voidReason: t.voidReason ?? null })),
     allocations: state.allocations.map((a) => ({ id: a.id, date: a.date, fundId: a.fundId, accountId: a.accountId, amountCents: a.cents, kind: a.kind, moveId: a.moveId ?? null, receivableId: a.receivableId ?? null, note: a.note || null })),
     bankReconciliations: state.reconciliations.map((r) => pick(r, ['id', 'accountId', 'date', 'bankCents', 'resolvedTxId'])),

@@ -115,7 +115,7 @@ test('solo le spese giuste attingono al fondo: altro conto, categoria fuori budg
   let r = await C.addPlanned(s, ctx(), { name: 'Corso', kind: 'subscription', cents: 3000, dueDate: W1, accountId: rev, fundMode: 'none', recurrence: 'monthly', categoryId: 'cat_fun' }); s = r.state;
   ({ state: s } = await C.completePlanned(s, ctx(), { id: r.result }));
   assert.equal(s.transactions.at(-1).fundId, null);
-  assert.equal(budgetStatus(s, W1).spentCents, 2000);                                // spesa da altro conto (conta nel budget) + spesa del conto; il corso (3000) NON pesa
+  assert.equal(budgetStatus(s, W1).spentCents, 1000);                                // con il budget finanziato conta solo il conto spese (l'altro conto no, salvo flag esplicito); il corso (3000) NON pesa
   // spesa di una settimana passata registrata ora: non consuma il fondo di questa settimana
   s = await spend(s, rev, 1000, '2026-06-10');
   assert.equal(s.transactions.at(-1).fundId, null); assert.equal(fund(s, f), 22000 - 1000);
