@@ -280,3 +280,29 @@ test('conto spese del budget: non può coincidere col conto delle settimane in a
   s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
   await expectError(C.setBudgetAccount(s, ctx(), { accountId: isy }), 'conto_appoggio');
 });
+
+// ───── "Finanzia ora" a metà settimana non rifinanzia ciò che è già stato speso ─────
+test('a metà settimana "Finanzia ora" non riporta il fondo a 220: il livello è ciò che RESTA', async () => {
+  let { s, rev, isy, fund: f } = await setup({ cash: 100000 });
+  s = (await run(s, W1, { force: true })).state;                                        // lunedì: 220
+  s = await spend(s, rev, 16590, W1);                                                    // spesi 165,90 → restano 54,10
+  assert.equal(fund(s, f), 5410);
+  const out = await run(s, W1, { force: true });
+  assert.equal(out.result.funded, 0); assert.equal(out.result.shortfall, 0); assert.equal(out.result.level, 5410);
+  assert.equal(fund(out.state, f), 5410);
+  assert.equal(snapshot(out.state).freeByAccount[rev], snapshot(s).freeByAccount[rev]);   // nessun denaro libero toccato
+});
+
+test('con settimane in anticipo e spese già fatte: il totale riservato è già quello dovuto, nessun prelievo dal conto di appoggio', async () => {
+  let { s, rev, isy, fund: f } = await setup({ cash: 100000 });
+  const bb = await C.addAccount(s, ctx(), { name: 'BBVA', openingCents: 15039, openingDate: '2026-01-01' }); s = bb.state; const bbva = bb.result;
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: isy })).state;
+  s = (await run(s, W1, { force: true })).state;                                         // 220 su Revolut + 660 su Isybank
+  s = await spend(s, rev, 16590, W1);                                                    // restano 54,10 + 660
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: bbva })).state;   // cambio conto di appoggio
+  const before = snapshot(s).freeByAccount[bbva];
+  const out = await run(s, W1, { force: true });
+  assert.equal(out.result.shortfall, 0);
+  assert.equal(snapshot(out.state).freeByAccount[bbva], before);                         // BBVA non perde nemmeno un centesimo
+  assert.equal(out.result.level, 5410 + 66000);
+});

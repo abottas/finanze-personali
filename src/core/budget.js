@@ -50,6 +50,15 @@ export function budgetStatus(state, today) {
 }
 
 /**
+ * Quanto deve esserci ORA nel fondo per la settimana corrente: il budget che RESTA (settimanale + riporto − già speso),
+ * mai meno di zero. A inizio settimana coincide con budgetTargetLevel; a metà settimana NON rifinanzia ciò che hai già speso.
+ */
+export function budgetFundLevel(state, today) {
+  const st = budgetStatus(state, today);
+  return st.started ? Math.max(0, st.remainingCents) : 0;
+}
+
+/**
  * Quanto dovrebbe esserci nel fondo budget all'inizio della settimana corrente:
  *   settimanale + riporto (avanzo riportato; sforo sottratto), mai meno di zero.
  * Le stesse regole di riporto che hai già configurato.

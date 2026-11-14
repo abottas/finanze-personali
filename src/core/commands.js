@@ -11,7 +11,7 @@ import { COLOR_KEYS, BANKS } from './palette.js';
 import { snapshot, balanceOf } from './derive.js';
 import { validateState } from './validate.js';
 import { appendAudit } from './audit.js';
-import { budgetTargetLevel, countsInWeeklyBudget } from './budget.js';
+import { budgetFundLevel, countsInWeeklyBudget } from './budget.js';
 import { validateProfile } from './profile.js';
 
 async function mutate(state, ctx, fn) {
@@ -998,7 +998,7 @@ export function runBudgetFunding(state, ctx, { force = false } = {}) {
     if (ctx.today < b.startDate) { res.skipped = 'non_iniziato'; return res; }
     const adv = b.advanceWeeks ?? 0;
     const src = adv > 0 && b.sourceAccountId ? s.accounts.find((a) => a.id === b.sourceAccountId && !a.archived) : null;
-    const cur = budgetTargetLevel(s, ctx.today);                 // settimana corrente (con riporto) → sul conto spese
+    const cur = budgetFundLevel(s, ctx.today);                   // ciò che RESTA della settimana corrente (già dedotto il speso) → sul conto spese
     const target = cur + (src ? adv * b.weeklyCents : 0);        // + settimane in anticipo → sul conto di appoggio
     const snap = snapshot(s);
     const by = snap.funds[f.id].byAccount;
