@@ -48,14 +48,14 @@
     "openingDate": "2026-11-01",
     "lastBalanceAdjustmentDate": null,
     "lastBankReconciliation": null,
-    "reservedCents": 47500,
-    "freeCents": 287000,
+    "reservedCents": 41500,
+    "freeCents": 293000,
     "reservations": [
      {
       "fundId": "id0013",
       "fundName": "Budget settimanale",
       "fundKind": "budget",
-      "cents": 47500
+      "cents": 41500
      }
     ]
    },
@@ -168,14 +168,14 @@
    "liquidCents": 640000,
    "investedCents": 40000,
    "totalWealthCents": 680000,
-   "reservedCents": 110000,
-   "freeCents": 530000,
+   "reservedCents": 104000,
+   "freeCents": 536000,
    "reservedByFundKindCents": {
     "goal": 0,
     "tax": 0,
     "planned": 10000,
     "reserve": 0,
-    "budget": 100000
+    "budget": 94000
    },
    "partial": false,
    "accountsWithUnknownBalance": []
@@ -185,7 +185,7 @@
     "fundId": "id0013",
     "fromAccountId": "id0001",
     "toAccountId": "id0002",
-    "cents": 7500,
+    "cents": 1500,
     "meaning": "riserva virtuale su un conto diverso da quello di riferimento del fondo: bonifico reale non ancora confermato"
    },
    {
@@ -638,7 +638,7 @@
     },
     {
      "accountId": "id0001",
-     "cents": 47500
+     "cents": 41500
     }
    ],
    "currentWeek": {
@@ -843,8 +843,8 @@
     "refillFundId": null,
     "goal": null,
     "targetCents": 0,
-    "allocatedAvailableCents": 100000,
-    "assignedTotalCents": 100000,
+    "allocatedAvailableCents": 94000,
+    "assignedTotalCents": 94000,
     "spentFromFundCents": 0,
     "stillNeededCents": 0,
     "locations": [
@@ -855,11 +855,11 @@
      },
      {
       "accountId": "id0001",
-      "cents": 47500,
+      "cents": 41500,
       "isReferenceAccount": false
      }
     ],
-    "pendingBankTransferCents": 7500
+    "pendingBankTransferCents": 1500
    },
    {
     "id": "id0081",
@@ -1000,7 +1000,7 @@
     "date": "2026-11-12",
     "fundId": "id0013",
     "accountId": "id0001",
-    "amountCents": 47500,
+    "amountCents": 41500,
     "kind": "assign",
     "moveId": null,
     "receivableId": null,
@@ -1164,6 +1164,8 @@
   },
   "year": 2026,
   "ledger": {
+   "registeredIncomeIgnoredByOpeningDataCents": 0,
+   "registeredIncomeIgnoredByOpeningDataCount": 0,
    "estimateTotalDueCents": 306476,
    "estimateStillDueCents": 306476,
    "collectedRevenueCents": 1320000,
@@ -1198,8 +1200,8 @@
   },
   "start": {
    "liquidCents": 640000,
-   "freeCents": 530000,
-   "reservedCents": 110000
+   "freeCents": 536000,
+   "reservedCents": 104000
   },
   "minimumFree": {
    "cents": 250000,
@@ -1300,7 +1302,7 @@
     "kind": "budget",
     "label": "Budget settimanale",
     "amountCents": -20000,
-    "effectOnFreeCents": -14000,
+    "effectOnFreeCents": -20000,
     "countedInPrudent": true,
     "projectedFromRecurringInvoice": false,
     "coveredByFundCents": null,
@@ -1680,164 +1682,164 @@
    {
     "date": "2026-11-12",
     "liquidPrudentCents": 576000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 46000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 40000,
     "liquidWithExpectedCents": 576000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 46000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 40000
    },
    {
     "date": "2026-11-13",
     "liquidPrudentCents": 576000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 46000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 40000,
     "liquidWithExpectedCents": 576000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 46000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 40000
    },
    {
     "date": "2026-11-14",
     "liquidPrudentCents": 576000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 46000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 40000,
     "liquidWithExpectedCents": 576000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 46000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 40000
    },
    {
     "date": "2026-11-15",
     "liquidPrudentCents": 576000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 46000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 40000,
     "liquidWithExpectedCents": 576000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 46000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 40000
    },
    {
     "date": "2026-11-16",
     "liquidPrudentCents": 556000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 26000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 20000,
     "liquidWithExpectedCents": 556000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 26000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 20000
    },
    {
     "date": "2026-11-17",
     "liquidPrudentCents": 556000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 26000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 20000,
     "liquidWithExpectedCents": 556000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 26000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 20000
    },
    {
     "date": "2026-11-18",
     "liquidPrudentCents": 556000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 26000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 20000,
     "liquidWithExpectedCents": 556000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 26000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 20000
    },
    {
     "date": "2026-11-19",
     "liquidPrudentCents": 556000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 26000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 20000,
     "liquidWithExpectedCents": 556000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 26000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 20000
    },
    {
     "date": "2026-11-20",
     "liquidPrudentCents": 556000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 26000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 20000,
     "liquidWithExpectedCents": 556000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 26000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 20000
    },
    {
     "date": "2026-11-21",
     "liquidPrudentCents": 556000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 26000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 20000,
     "liquidWithExpectedCents": 556000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 26000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 20000
    },
    {
     "date": "2026-11-22",
     "liquidPrudentCents": 556000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 26000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 20000,
     "liquidWithExpectedCents": 556000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 26000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 20000
    },
    {
     "date": "2026-11-23",
     "liquidPrudentCents": 536000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 6000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 0,
     "liquidWithExpectedCents": 536000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 6000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 0
    },
    {
     "date": "2026-11-24",
     "liquidPrudentCents": 536000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 6000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 0,
     "liquidWithExpectedCents": 536000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 6000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 0
    },
    {
     "date": "2026-11-25",
     "liquidPrudentCents": 536000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 6000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 0,
     "liquidWithExpectedCents": 536000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 6000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 0
    },
    {
     "date": "2026-11-26",
     "liquidPrudentCents": 536000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 6000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 0,
     "liquidWithExpectedCents": 536000,
-    "freeWithExpectedCents": 530000,
-    "reservedWithExpectedCents": 6000
+    "freeWithExpectedCents": 536000,
+    "reservedWithExpectedCents": 0
    },
    {
     "date": "2026-11-27",
     "liquidPrudentCents": 536000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 6000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 0,
     "liquidWithExpectedCents": 676000,
-    "freeWithExpectedCents": 635000,
-    "reservedWithExpectedCents": 41000
+    "freeWithExpectedCents": 641000,
+    "reservedWithExpectedCents": 35000
    },
    {
     "date": "2026-11-28",
     "liquidPrudentCents": 536000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 6000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 0,
     "liquidWithExpectedCents": 676000,
-    "freeWithExpectedCents": 635000,
-    "reservedWithExpectedCents": 41000
+    "freeWithExpectedCents": 641000,
+    "reservedWithExpectedCents": 35000
    },
    {
     "date": "2026-11-29",
     "liquidPrudentCents": 536000,
-    "freePrudentCents": 530000,
-    "reservedPrudentCents": 6000,
+    "freePrudentCents": 536000,
+    "reservedPrudentCents": 0,
     "liquidWithExpectedCents": 676000,
-    "freeWithExpectedCents": 635000,
-    "reservedWithExpectedCents": 41000
+    "freeWithExpectedCents": 641000,
+    "reservedWithExpectedCents": 35000
    },
    {
     "date": "2026-11-30",
@@ -2588,7 +2590,7 @@
    "verdict": {
     "minFree": 250000,
     "minFreeDate": "2027-02-08",
-    "minFreeWithExpected": 530000,
+    "minFreeWithExpected": 536000,
     "minFreeWithExpectedDate": "2026-11-12",
     "uncovered": 0,
     "dependOnReceipts": 0,
@@ -2604,7 +2606,7 @@
     "outBudget": 314000,
     "outInvest": 40000,
     "outTotal": 390000,
-    "outFree": 280000,
+    "outFree": 286000,
     "freeEnd": 250000,
     "freeEndWithExpected": 865000,
     "totalEnd": 250000,
@@ -2659,7 +2661,7 @@
      "type": "budget",
      "label": "Budget settimanale (4 settimane)",
      "amountCents": -114000,
-     "effectOnFreeCents": -14000,
+     "effectOnFreeCents": -20000,
      "status": "ok",
      "freeAfterPrudentCents": 516000,
      "freeAfterWithExpectedCents": 621000
@@ -2672,8 +2674,8 @@
      "amountCents": -10000,
      "effectOnFreeCents": 0,
      "status": "ok",
-     "freeAfterPrudentCents": 530000,
-     "freeAfterWithExpectedCents": 530000
+     "freeAfterPrudentCents": 536000,
+     "freeAfterWithExpectedCents": 536000
     },
     {
      "date": "2026-11-27",
@@ -2683,8 +2685,8 @@
      "amountCents": 140000,
      "effectOnFreeCents": 105000,
      "status": null,
-     "freeAfterPrudentCents": 530000,
-     "freeAfterWithExpectedCents": 635000
+     "freeAfterPrudentCents": 536000,
+     "freeAfterWithExpectedCents": 641000
     },
     {
      "date": "2026-12-01",
@@ -2919,7 +2921,7 @@
     "fundId": "id0013",
     "fromAccountId": "id0001",
     "toAccountId": "id0002",
-    "cents": 7500
+    "cents": 1500
    },
    {
     "type": "bank_transfer_to_confirm",

@@ -12,11 +12,11 @@ import { parseEuro, formatEuro, toInputValue } from '../core/money.js';
 import { snapshot, fundNeed, pendingTransfers } from '../core/derive.js';
 import { proposeAllocation } from '../core/allocation.js';
 import { buildDemoState } from '../core/demo.js';
-import { formatDate, formatDateLong } from '../core/dates.js';
+import { formatDate, formatDateLong, addDays as addDaysF } from '../core/dates.js';
 import { createBackup, verifyBackup } from '../crypto/backup.js';
 import { checkPasswordStrength, MIN_PASSWORD_LENGTH } from '../crypto/vault.js';
 import { runIntegrityChecks } from '../core/integrity.js';
-import { estimateTaxes, grossForNet } from '../core/tax.js';
+import { estimateTaxes, grossForNet, estimateAnnual } from '../core/tax.js';
 import { aiExportJson } from '../core/export-ai.js';
 import { budgetStatus, countsInWeeklyBudget } from '../core/budget.js';
 import { situationCsv, statsCsv, forecastSummaryCsv, forecastDetailCsv } from '../core/reports.js';
@@ -726,7 +726,8 @@ export function createActions(api) {
       api.openSheet({
         title: `Già maturato nel ${y}`, submit: 'Salva',
         body: html`<div class="note">Inserisci quanto hai <b>incassato</b> dal 1° gennaio fino al giorno indicato, cioè prima di cominciare a registrare qui: da quello l'app calcola <b>contributi INPS e imposta</b>. Se hai anche già <b>versato</b> qualcosa (INPS o acconti), aggiungilo sotto; se è il primo anno e non hai versato nulla, <b>lascia vuoto</b>. I movimenti dell'app fino a quel giorno non vengono contati due volte.</div>
-          ${field('until', 'Fino al giorno (incluso)', { type: 'date', value: o?.untilDate ?? app.today, attrs: `min="${y}-01-01" max="${app.today}" required` })}
+          ${field('until', 'Fino al giorno (incluso)', { type: 'date', value: o?.untilDate ?? addDaysF(app.today, -1), attrs: `min="${y}-01-01" max="${app.today}" required`, hint: 'Metti il giorno PRIMA del primo incasso che registrerai nell\'app: gli incassi con questa data o precedente non vengono contati.' })}
+          ${(() => { const ig = estimateAnnual(st(), y, app.today).ignoredByOpening; return ig.count ? html`<div class="alert high">${I.warn}<span>Nell'app ci sono ${ig.count} incassi (${formatEuro(ig.cents)}) con data uguale o precedente a quella salvata: <b>non vengono contati</b>.</span></div>` : ''; })()}
           ${moneyField('ricavi', 'Incassato (compensi ricevuti)', o?.ricaviCents ?? null, { required: false, hint: 'Conta solo ciò che ti è davvero arrivato: una fattura emessa ma non ancora pagata dal cliente non va inclusa (si tassa quando la incassi).' })}
           ${moneyField('inps', 'Contributi INPS già versati (facoltativo)', o?.inpsPaidCents ?? null, { required: false, hint: 'Lascia vuoto se non hai ancora versato nulla.' })}
           ${moneyField('imp', 'Imposta sostitutiva già versata (facoltativo)', o?.impostaPaidCents ?? null, { required: false, hint: 'Acconti già pagati. Il primo anno di solito è vuoto.' })}

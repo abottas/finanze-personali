@@ -96,3 +96,17 @@ test('calcolatrice: compenso → netto; "voglio il netto" → compenso minimo ch
   }
   assert.equal(grossForNet(0, P), 0);
 });
+
+test('incassi registrati dentro il periodo dei dati iniziali: esclusi dal calcolo ma SEGNALATI (mai in silenzio)', async () => {
+  let { s, acc } = await setup();
+  s = (await C.setTaxOpening(s, ctx(), { year: 2026, untilDate: '2026-06-15', ricaviCents: 1733000 })).state;
+  s = await inc(s, acc, 140000, '2026-06-15');                    // stesso giorno del limite: ignorato
+  let a = estimateAnnual(s, 2026);
+  assert.equal(a.ricavi, 1733000); assert.equal(a.ricaviFromApp, 0);
+  assert.deepEqual([a.ignoredByOpening.count, a.ignoredByOpening.cents], [1, 140000]);
+  assert.equal(taxLedger(s, 2026, TODAY).estimate.ignoredByOpening.count, 1);
+  // spostando il limite al giorno prima, l'incasso conta e la segnalazione sparisce
+  s = (await C.setTaxOpening(s, ctx(), { year: 2026, untilDate: '2026-06-14', ricaviCents: 1733000 })).state;
+  a = estimateAnnual(s, 2026);
+  assert.equal(a.ricavi, 1873000); assert.equal(a.ricaviFromApp, 140000); assert.equal(a.ignoredByOpening.count, 0);
+});

@@ -135,6 +135,11 @@ await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', {
 await g.click('button[data-action=tax-opening]'); await g.waitForSelector('.sheet'); await g.fill('.sheet input[name=inps]', '1000'); await g.fill('.sheet input[name=imp]', '200');
 await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' }); await g.waitForTimeout(300);
 assert.ok((await g.locator('.screen').innerText()).includes('inserito a mano'), 'dati iniziali mostrati'); await gshot('37b-tasse-incassato');
+// regressione: data dei dati iniziali = oggi → l'incasso di oggi è escluso e la schermata lo SEGNALA
+await g.click('button[data-action=tax-opening]'); await g.waitForSelector('.sheet');
+await g.evaluate(() => { const i = document.querySelector('.sheet input[name=until]'); i.value = i.max; });
+await g.click('.sheet button[type=submit]'); await g.waitForSelector('.sheet', { state: 'detached' }); await g.waitForTimeout(300);
+assert.ok(/non (è|sono) conta/i.test(await g.locator('.screen').innerText()), 'avviso incasso escluso dai dati iniziali'); await gshot('37c-tasse-avviso-esclusi');
 const tx4 = await g.textContent('.screen');
 assert.match(tx4, /Stima fiscale/); assert.match(tx4, /Accantonamento personale/); assert.match(tx4, /Somme effettivamente trasferite/); assert.match(tx4, /Debiti fiscali effettivamente pagati/); assert.match(tx4, /da verificare per il/);
 const cspP = await g.evaluate(() => window.__csp); assert.equal(cspP.length, 0);

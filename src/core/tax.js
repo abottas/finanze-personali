@@ -68,7 +68,10 @@ export function estimateAnnual(state, year, today = null) {
   const counted = (d) => inYear(d) && (!op || d > op.untilDate);
   let ricavi = op?.ricaviCents ?? 0, inpsPaid = op?.inpsPaidCents ?? 0, impostaPaid = op?.impostaPaidCents ?? 0;
   const fromApp = { ricavi: 0 };
+  // Incassi professionali registrati nell'app ma ESCLUSI perché cadono dentro il periodo coperto dai dati iniziali (trasparenza: mai in silenzio).
+  const ignored = { count: 0, cents: 0, items: [] };
   for (const t of state.transactions) {
+    if (op && t.status === 'posted' && inYear(t.date) && t.date <= op.untilDate && t.kind === 'income' && t.categoryId === 'cat_pro') { ignored.count++; ignored.cents += t.cents; ignored.items.push({ id: t.id, date: t.date, cents: t.cents }); }
     if (t.status !== 'posted' || !counted(t.date)) continue;
     if (t.kind === 'income' && t.categoryId === 'cat_pro') { ricavi += t.cents; fromApp.ricavi += t.cents; }
     if (t.kind === 'expense' && t.categoryId === 'cat_inps') inpsPaid += -t.cents;
@@ -92,7 +95,7 @@ export function estimateAnnual(state, year, today = null) {
   }
   const sc = calc(ricavi + expectedRest, accrued ? null : inpsPaid);
   const scenarioTotalDue = sc.inps + sc.imposta;
-  return { year, ricavi, ricaviFromApp: fromApp.ricavi, opening: op, base, inpsDue, inpsPaid, impostaDue, impostaNoDeduction, impostaIfAllInpsPaid, impostaPaid, totalDue, paid, stillDue: Math.max(0, totalDue - paid), scenario: { expectedRest, ricavi: ricavi + expectedRest, totalDue: scenarioTotalDue, stillDue: Math.max(0, scenarioTotalDue - paid) } };
+  return { year, ricavi, ricaviFromApp: fromApp.ricavi, ignoredByOpening: ignored, opening: op, base, inpsDue, inpsPaid, impostaDue, impostaNoDeduction, impostaIfAllInpsPaid, impostaPaid, totalDue, paid, stillDue: Math.max(0, totalDue - paid), scenario: { expectedRest, ricavi: ricavi + expectedRest, totalDue: scenarioTotalDue, stillDue: Math.max(0, scenarioTotalDue - paid) } };
 }
 
 /**
@@ -122,7 +125,7 @@ export function taxLedger(state, year, today = null) {
   }
   return {
     year,
-    estimate: { totalDue: estimate.totalDue, stillDue: estimate.stillDue, ricavi: estimate.ricavi, ricaviFromApp: estimate.ricaviFromApp, inpsDue: estimate.inpsDue, impostaDue: estimate.impostaDue, base: estimate.base, opening: estimate.opening, scenario: estimate.scenario },
+    estimate: { totalDue: estimate.totalDue, stillDue: estimate.stillDue, ricavi: estimate.ricavi, ricaviFromApp: estimate.ricaviFromApp, ignoredByOpening: estimate.ignoredByOpening, inpsDue: estimate.inpsDue, impostaDue: estimate.impostaDue, base: estimate.base, opening: estimate.opening, scenario: estimate.scenario },
     earmarked: { allocatedYear, reservedNow },
     transferred: { year: transferredYear },
     paid: { inps: estimate.inpsPaid, imposta: estimate.impostaPaid, total: estimate.paid },
