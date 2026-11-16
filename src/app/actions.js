@@ -113,7 +113,7 @@ export function createActions(api) {
   function overboundSheet(accountId) {
     const S = st(), sn = snap(), acc = S.accounts.find((a) => a.id === accountId);
     const b = S.settings.budget;
-    const pend = pendingTransfers(S, sn).filter((p) => p.toAccountId === accountId);
+    const pend = pendingTransfers(S, sn, app.today).filter((p) => p.toAccountId === accountId);
     const res = S.funds.map((f) => [f, sn.funds[f.id].byAccount[accountId] ?? 0]).filter(([, c]) => c > 0);
     const nm = (id) => S.accounts.find((a) => a.id === id)?.name;
     api.openSheet({
@@ -212,7 +212,7 @@ export function createActions(api) {
       title: `${f.icon} ${f.name}`, submit: null, cancel: 'Chiudi',
       body: html`<div class="card"><div class="small muted">Disponibile nel fondo</div><div class="big num stat-big">${amt(sf.available)}</div>
         <div class="kv mt12"><span class="k">Assegnato (totale)</span><span class="num">${amt(sf.assigned)}</span><span class="k">Già speso</span><span class="num">${amt(sf.spent)}</span>${f.kind === 'goal' ? html`<span class="k">Obiettivo</span><span class="num">${amt(f.goal.targetCents)}</span>` : ''}${f.refillFundId ? html`<span class="k">Reintegro automatico</span><span>→ ${st().funds.find((x) => x.id === f.refillFundId)?.name ?? '—'}</span>` : ''}${need ? html`<span class="k">Ancora da coprire</span><span class="num">${amt(need)}</span>` : ''}${f.kind === 'goal' && f.goal.deadline ? html`<span class="k">Scadenza</span><span>${formatDate(f.goal.deadline, { year: true })}</span>` : ''}<span class="k">Conto di riferimento</span><span>${acc}</span>${Object.entries(sf.byAccount).filter(([, c]) => c !== 0).map(([id, c]) => html`<span class="k">Riservato su ${st().accounts.find((a) => a.id === id)?.name}</span><span class="num">${amt(c)}</span>`)}</div></div>
-        ${pendingTransfers(st(), sn).filter((p) => p.fundId === id).map((p) => html`<div class="alert">${I.warn}<span class="grow">${formatEuro(p.cents)} riservati su ${st().accounts.find((a) => a.id === p.fromAccountId)?.name}: bonifico verso ${acc} da confermare.</span><button class="btn sm primary inline" data-action="confirm-transfer" data-fund="${id}" data-from="${p.fromAccountId}" data-to="${p.toAccountId}" data-cents="${p.cents}">Bonifico fatto</button></div>`)}
+        ${pendingTransfers(st(), sn, app.today).filter((p) => p.fundId === id).map((p) => html`<div class="alert">${I.warn}<span class="grow">${formatEuro(p.cents)} riservati su ${st().accounts.find((a) => a.id === p.fromAccountId)?.name}: bonifico verso ${acc} da confermare.</span><button class="btn sm primary inline" data-action="confirm-transfer" data-fund="${id}" data-from="${p.fromAccountId}" data-to="${p.toAccountId}" data-cents="${p.cents}">Bonifico fatto</button></div>`)}
         <div class="btn-row"><button class="btn primary" data-action="assign" data-id="${id}">Assegna</button><button class="btn" data-action="release" data-id="${id}">Rilascia</button></div>
         <div class="spacer10"></div><div class="btn-row"><button class="btn" data-action="move-fund" data-id="${id}">Sposta ad altro fondo</button><button class="btn" data-action="edit-fund" data-id="${id}">Modifica</button></div>
         <div class="spacer10"></div><div class="btn-row"><button class="btn" data-action="relocate-fund" data-id="${id}">Sposta su altro conto</button><button class="btn danger" data-action="close-fund" data-id="${id}">Chiudi fondo</button></div>

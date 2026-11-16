@@ -1,3 +1,4 @@
+import { budgetFundLevel } from './budget.js';
 // Tutto ciò che è "derivato" nasce qui, mai memorizzato:
 //   saldo conto   = saldo iniziale + movimenti effettivi + trasferimenti
 //   fondo         = assegnato (allocazioni) − speso (uscite collegate al fondo)
@@ -71,15 +72,20 @@ export function snapshot(state) {
  * Bonifici DA CONFERMARE: la riserva di un fondo sta (virtualmente) su un conto diverso da quello di
  * riferimento del fondo. Non è un trasferimento eseguito: lo diventa solo quando l'utente lo conferma.
  */
-export function pendingTransfers(state, snap) {
+export function pendingTransfers(state, snap, today = null) {
   const out = [];
   for (const f of state.funds) {
     if (f.archived) continue;
     for (const [acc, cents] of Object.entries(snap.funds[f.id].byAccount)) {
       let c = cents;
-      // Budget finanziato in anticipo: le settimane future restano volutamente sul conto di appoggio; da spostare è solo il resto.
+      // Budget finanziato in anticipo: le settimane future restano volutamente sul conto di appoggio; da spostare è solo il resto
+      // E quanto serve al conto spese per la settimana CORRENTE (a ogni lunedì una delle settimane in anticipo diventa quella corrente).
       const b = state.settings.budget;
-      if (f.id === b.fundId && acc === b.sourceAccountId) c = Math.max(0, cents - (b.advanceWeeks ?? 0) * b.weeklyCents);
+      if (f.id === b.fundId && acc === b.sourceAccountId) {
+        const excess = Math.max(0, cents - (b.advanceWeeks ?? 0) * b.weeklyCents);
+        const needOnSpending = today ? Math.max(0, budgetFundLevel(state, today) - (snap.funds[f.id].byAccount[f.accountId] ?? 0)) : 0;
+        c = Math.max(excess, Math.min(cents, needOnSpending));
+      }
       if (acc !== f.accountId && c > 0) out.push({ fundId: f.id, fromAccountId: acc, toAccountId: f.accountId, cents: c });
     }
   }

@@ -72,7 +72,7 @@ export function moneyMap(app, snap) {
 /** Accantonamenti virtuali la cui riserva sta su un conto diverso da quello di riferimento del fondo. */
 export function pendingCard(app, snap) {
   const st = app.state;
-  const list = pendingTransfers(st, snap);
+  const list = pendingTransfers(st, snap, app.today);
   if (!list.length) return '';
   const nm = (id) => st.accounts.find((x) => x.id === id)?.name ?? '—';
   return html`<section class="card"><h2>Bonifici da confermare <span class="pill warn">${list.length}</span></h2>
@@ -86,12 +86,17 @@ function budgetFundLine(st, snap, bs) {
   const b = st.settings.budget;
   if (!b.fundId) return html`<div class="note">Il budget è solo un <b>tetto di spesa</b>: non riserva denaro. <button class="link-btn small" data-nav="settings/budget">Finanzialo come un fondo</button></div>`;
   const have = snap.funds[b.fundId]?.available ?? 0;
-  const need = Math.max(0, bs.remainingCents);
-  const short = Math.max(0, need + (b.advanceWeeks ?? 0) * b.weeklyCents - have);
+  const adv = b.advanceWeeks ?? 0;
+  const week = Math.max(0, bs.remainingCents);
+  const need = week + adv * b.weeklyCents;
+  const short = Math.max(0, need - have);
   const acc = st.accounts.find((a) => a.id === b.accountId);
+  const src = adv > 0 ? st.accounts.find((a) => a.id === b.sourceAccountId) : null;
+  const where = [acc?.name ?? 'conto spese', src?.name].filter(Boolean).join(' o ');
+  const parts = adv > 0 ? `settimana corrente ${formatEuro(week)} + ${adv} ${adv === 1 ? 'settimana' : 'settimane'} in anticipo ${formatEuro(adv * b.weeklyCents)}` : '';
   return short > 0
-    ? html`<div class="alert">${I.warn}<span class="grow">Budget <b>non del tutto finanziato</b>: riservati ${formatEuro(have)} su ${formatEuro(need)} (mancano ${formatEuro(short)}${acc?.balanceUnknown ? ': aggiorna il saldo di ' + acc.name : ' nel denaro libero di ' + (acc?.name ?? 'conto spese')}).</span><button class="btn sm primary inline" data-action="budget-fund-now">Finanzia ora</button></div>`
-    : html`<div class="small muted mt8">🧺 Finanziato: ${formatEuro(have)} riservati${b.advanceWeeks ? ` (settimana corrente + ${Math.min(b.advanceWeeks, Math.floor(Math.max(0, have - need) / Math.max(1, b.weeklyCents)))} di ${b.advanceWeeks} in anticipo)` : ` sul conto ${acc?.name ?? ''}`} · non sono liberi da spendere altrove.</div>`;
+    ? html`<div class="alert">${I.warn}<span class="grow">Budget <b>non del tutto finanziato</b>: riservati ${formatEuro(have)} su ${formatEuro(need)}${parts ? ` (${parts})` : ''}. Mancano <b>${formatEuro(short)}</b>${acc?.balanceUnknown ? `: aggiorna il saldo di ${acc.name}` : ` di denaro libero (su ${where})`}.</span><button class="btn sm primary inline" data-action="budget-fund-now">Finanzia ora</button></div>`
+    : html`<div class="small muted mt8">🧺 Finanziato: ${formatEuro(have)} riservati${adv ? ` (settimana corrente + ${adv} in anticipo)` : ` sul conto ${acc?.name ?? ''}`} · non sono liberi da spendere altrove.</div>`;
 }
 
 const flowLegend = () => html`<div class="legend"><span><i class="lg-inc"></i>Incassi</span><span><i class="lg-exp"></i>Spese</span><span><i class="lg-tax"></i>Riserva fiscale</span><span><i class="lg-inv"></i>Investito</span><span><i class="lg-net"></i>Disponibile</span></div>`;
@@ -631,7 +636,7 @@ function settingsStatus(app, back) {
   const st = app.state, today = app.today, snap = snapshot(st);
   const nm = (id) => st.accounts.find((a) => a.id === id)?.name ?? '—';
   const unknown = st.accounts.filter((a) => a.balanceUnknown && !a.archived);
-  const pending = pendingTransfers(st, snap);
+  const pending = pendingTransfers(st, snap, today);
   const open = st.receivables.filter((r) => r.status === 'expected' || r.status === 'partial');
   const planned = st.planned.filter((p) => p.status === 'planned');
   const toConfirm = planned.filter((p) => p.confirm);

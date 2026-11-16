@@ -306,3 +306,23 @@ test('con settimane in anticipo e spese già fatte: il totale riservato è già 
   assert.equal(snapshot(out.state).freeByAccount[bbva], before);                         // BBVA non perde nemmeno un centesimo
   assert.equal(out.result.level, 5410 + 66000);
 });
+
+// ───── Passaggio di settimana con settimane in anticipo: serve il bonifico della settimana che inizia ─────
+test('lunedì: una delle settimane in anticipo diventa corrente → compare il bonifico verso il conto spese; dopo la conferma tutto torna a regime', async () => {
+  let { s, rev, fund: f } = await setup({ cash: 22000 });
+  const bb = await C.addAccount(s, ctx(), { name: 'BBVA', openingCents: 100000, openingDate: '2026-01-01' }); s = bb.state; const bbva = bb.result;
+  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: bbva })).state;
+  s = (await run(s, W1, { force: true })).state;                                   // Revolut 220 · BBVA 660
+  assert.equal(pendingTransfers(s, snapshot(s), W1).length, 0);
+  s = await spend(s, rev, 20590, W1);                                              // restano 14,10 sul conto spese
+  assert.equal(byAcc(s, f, rev), 1410);
+  assert.equal(pendingTransfers(s, snapshot(s), W2).length, 1);                    // nella settimana nuova: 234,10 dovuti, 14,10 sul conto spese
+  assert.deepEqual(pendingTransfers(s, snapshot(s), W2).map((p) => [p.fromAccountId, p.cents]), [[bbva, 22000]]);
+  const out = await run(s, W2); s = out.state;                                     // si ripristina il livello (un'altra settimana in anticipo) dal libero di BBVA
+  assert.equal(out.result.shortfall, 0); assert.equal(byAcc(s, f, bbva), 66000 + 22000);
+  assert.deepEqual(pendingTransfers(s, snapshot(s), W2).map((p) => [p.fromAccountId, p.cents]), [[bbva, 22000]]);
+  s = (await C.confirmFundTransfer(s, at(W2), { fundId: f, fromAccountId: bbva, toAccountId: rev, cents: 22000, date: W2 })).state;
+  assert.equal(byAcc(s, f, rev), 1410 + 22000); assert.equal(byAcc(s, f, bbva), 66000);
+  assert.equal(pendingTransfers(s, snapshot(s), W2).length, 0);
+  assert.deepEqual(validateState(s), []); assert.equal((await runIntegrityChecks(s)).ok, true);
+});

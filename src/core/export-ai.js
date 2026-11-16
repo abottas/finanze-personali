@@ -22,7 +22,7 @@ const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefin
  */
 export function buildAiExport(state, { today, nowIso, appVersion = null }) {
   const snap = snapshot(state);
-  const pending = pendingTransfers(state, snap);
+  const pending = pendingTransfers(state, snap, today);
   const fundById = Object.fromEntries(state.funds.map((f) => [f.id, f]));
   const catById = Object.fromEntries(state.categories.map((c) => [c.id, c]));
   const unknownAccounts = state.accounts.filter((a) => a.balanceUnknown && !a.archived);

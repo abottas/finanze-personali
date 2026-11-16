@@ -15,7 +15,7 @@ import { today as todayLocal } from '../core/dates.js';
 import { AppError } from '../core/errors.js';
 import * as C from '../core/commands.js';
 
-const VERSION = '0.15.2';
+const VERSION = '0.15.3';
 const $ = (s) => document.querySelector(s);
 const root = $('#app'), sheetRoot = $('#sheet-root'), toastEl = $('#toast'), cover = $('#cover');
 
