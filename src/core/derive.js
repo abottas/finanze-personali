@@ -74,19 +74,20 @@ export function snapshot(state) {
  */
 export function pendingTransfers(state, snap, today = null) {
   const out = [];
+  const b = state.settings.budget;
   for (const f of state.funds) {
     if (f.archived) continue;
-    for (const [acc, cents] of Object.entries(snap.funds[f.id].byAccount)) {
-      let c = cents;
-      // Budget finanziato in anticipo: le settimane future restano volutamente sul conto di appoggio; da spostare è solo il resto
-      // E quanto serve al conto spese per la settimana CORRENTE (a ogni lunedì una delle settimane in anticipo diventa quella corrente).
-      const b = state.settings.budget;
-      if (f.id === b.fundId && acc === b.sourceAccountId) {
-        const excess = Math.max(0, cents - (b.advanceWeeks ?? 0) * b.weeklyCents);
-        const needOnSpending = today ? Math.max(0, budgetFundLevel(state, today) - (snap.funds[f.id].byAccount[f.accountId] ?? 0)) : 0;
-        c = Math.max(excess, Math.min(cents, needOnSpending));
-      }
-      if (acc !== f.accountId && c > 0) out.push({ fundId: f.id, fromAccountId: acc, toAccountId: f.accountId, cents: c });
+    const entries = Object.entries(snap.funds[f.id].byAccount);
+    // Budget con settimane riservate su altri conti: da spostare sul conto spese è SOLO ciò che serve alla settimana corrente;
+    // le settimane future restano dove sono (nessun bonifico da fare finché non scattano).
+    let need = Infinity;
+    if (f.id === b.fundId && today) need = Math.max(0, budgetFundLevel(state, today) - (snap.funds[f.id].byAccount[f.accountId] ?? 0));
+    for (const [acc, cents] of entries) {
+      if (acc === f.accountId || cents <= 0) continue;
+      const c = Math.min(cents, need);
+      if (c <= 0) continue;
+      if (need !== Infinity) need -= c;
+      out.push({ fundId: f.id, fromAccountId: acc, toAccountId: f.accountId, cents: c });
     }
   }
   return out;

@@ -29,8 +29,8 @@ await tx(acc['Banca Spese'], '2026-11-09', -4200, 'expense', 'cat_food', 'Spesa 
 await tx(acc['Banca Spese'], '2026-11-10', -2500, 'expense', 'cat_subs', 'Abbonamento software');
 await tx(acc['Banca Spese'], '2026-11-11', -1800, 'expense', 'cat_eat', 'Cena');
 // Budget finanziato con 2 settimane in anticipo
-s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: acc['Banca Accrediti'] })).state;
 s = (await C.runBudgetFunding(s, ctx(), { force: true })).state;
+s = (await C.fundAdvanceWeeks(s, ctx(), { weeks: 2, accountId: acc['Banca Accrediti'] })).state;
 // Scadenze finanziate in anticipo
 s = (await C.setPlannedFunding(s, ctx(), { enabled: true, horizonDays: 45, sourceAccountId: acc['Banca Risparmio'] })).state;
 s = (await C.runPlannedFunding(s, ctx(), { force: true })).state;

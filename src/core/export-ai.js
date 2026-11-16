@@ -5,7 +5,7 @@
 // Esclusi per costruzione: password, chiavi di cifratura, IBAN (il modello non li contiene), loghi, registro modifiche.
 import { snapshot, pendingTransfers, fundTarget, fundNeed, reserveProgress, childFunds } from './derive.js';
 import { forecast } from './forecast.js';
-import { countsInWeeklyBudget } from './budget.js';
+import { countsInWeeklyBudget, budgetWeeksCoverage } from './budget.js';
 import { budgetStatus } from './budget.js';
 import { taxLedger } from './tax.js';
 import { monthlySeries } from './analytics.js';
@@ -106,7 +106,7 @@ export function buildAiExport(state, { today, nowIso, appVersion = null }) {
   const b = state.settings.budget;
   const budget = {
     weeklyCents: b.weeklyCents, startDate: b.startDate, carryOverSurplus: !!b.carryOver, carryOverDeficit: !!b.carryDeficit,
-    fundedAsFund: !!b.fundId, fundId: b.fundId ?? null, spendingAccountId: b.accountId ?? null, advanceWeeks: b.advanceWeeks ?? 0, advanceSourceAccountId: b.sourceAccountId ?? null, lastFundedWeek: b.lastFundedWeek ?? null,
+    fundedAsFund: !!b.fundId, fundId: b.fundId ?? null, spendingAccountId: b.accountId ?? null, advanceSourceAccountId: b.sourceAccountId ?? null, weeksCoverage: budgetWeeksCoverage(state, today, 8).map((w) => ({ weekStart: w.weekStart, weekEnd: w.weekEnd, isCurrent: !!w.current, funded: w.funded })), lastFundedWeek: b.lastFundedWeek ?? null,
     fundReservedByAccount: b.fundId ? Object.entries(snap.funds[b.fundId].byAccount).filter(([, c]) => c !== 0).map(([accountId, cents]) => ({ accountId, cents })) : [],
     currentWeek: { started: bs.started, weekStart: bs.weekStart, weekEnd: bs.weekEnd, baseCents: bs.baseCents, carryCents: bs.carryCents, spentCents: bs.spentCents, remainingCents: bs.remainingCents },
     weeks: bs.weeks.map((w) => ({ weekStart: w.weekStart, baseCents: w.base, carryCents: w.carry, spentCents: w.spent, remainingCents: w.remaining })),

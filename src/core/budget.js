@@ -68,3 +68,33 @@ export function budgetTargetLevel(state, today) {
   if (!st.started) return 0;
   return Math.max(0, st.baseCents + st.carryCents);
 }
+
+/**
+ * Vista a calendario: per le prossime `n` settimane, quali sono FINANZIATE. Il denaro riservato su altri conti ("settimane in anticipo")
+ * viene consumato in ordine: prima completa la settimana corrente sul conto spese, poi copre le settimane future (budget settimanale pieno).
+ */
+export function budgetWeeksCoverage(state, today, n = 8) {
+  const b = state.settings.budget;
+  if (!b.fundId || b.weeklyCents <= 0) return [];
+  const bs = budgetStatus(state, today);
+  const snap = snapshotLite(state, b);
+  const cur = Math.max(0, bs.remainingCents);
+  let pool = snap.pool;
+  const need = Math.max(0, cur - snap.haveAcc);
+  const out = [{ weekStart: bs.weekStart, weekEnd: bs.weekEnd, current: true, funded: snap.haveAcc + pool >= cur, onSpendingAccountCents: snap.haveAcc, fromOtherAccountsCents: Math.min(pool, need) }];
+  pool = Math.max(0, pool - need);
+  let ws = addDays(bs.weekStart, 7);
+  for (let i = 1; i < n; i++) {
+    const ok = pool >= b.weeklyCents;
+    if (ok) pool -= b.weeklyCents;
+    out.push({ weekStart: ws, weekEnd: addDays(ws, 6), current: false, funded: ok, fromOtherAccountsCents: ok ? b.weeklyCents : 0 });
+    ws = addDays(ws, 7);
+  }
+  return out;
+}
+function snapshotLite(state, b) {
+  let haveAcc = 0, pool = 0;
+  for (const a of state.allocations) if (a.fundId === b.fundId) { if (a.accountId === b.accountId) haveAcc += a.cents; else pool += a.cents; }
+  for (const t of state.transactions) if (t.status === 'posted' && t.fundId === b.fundId) { if (t.accountId === b.accountId) haveAcc += t.cents; else pool += t.cents; }
+  return { haveAcc, pool: Math.max(0, pool) };
+}

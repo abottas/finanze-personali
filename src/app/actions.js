@@ -826,7 +826,7 @@ export function createActions(api) {
     },
     'budget-account': () => {
       const b = st().settings.budget;
-      const opts = accOpts().filter(([id]) => id !== b.accountId && !(b.advanceWeeks > 0 && id === b.sourceAccountId));
+      const opts = accOpts().filter(([id]) => id !== b.accountId);
       if (!opts.length) { api.toast('Nessun altro conto disponibile', true); return; }
       api.openSheet({
         title: 'Conto spese del budget', submit: 'Cambia',
@@ -837,17 +837,16 @@ export function createActions(api) {
     },
     'budget-advance': () => {
       const b = st().settings.budget;
-      const others = accOpts().filter(([id]) => id !== b.accountId);
-      if (!others.length) { api.toast('Serve un secondo conto come appoggio', true); return; }
+      const others = accOpts().filter(([id]) => id !== b.accountId).map(([id, n]) => [id, `${n} · libero ${formatEuro(snap().freeByAccount[id])}`]);
+      if (!others.length) { api.toast('Serve un altro conto da cui riservare', true); return; }
       api.openSheet({
-        title: 'Settimane finanziate in anticipo', submit: 'Salva',
-        body: html`<div class="note">Oltre alla settimana corrente, l'app riserva ${formatEuro(b.weeklyCents)} per ciascuna delle prossime settimane dal <b>denaro libero del conto di appoggio</b>. Il denaro resta dov'è (nessun bonifico finché non lo fai): serve a non allocarlo altrove. Ogni lunedì ti propone <b>un solo bonifico</b>, quello della settimana che comincia.</div>
-          ${select('weeks', 'Settimane in anticipo', [['0', 'Nessuna'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']], String(b.advanceWeeks ?? 0))}
-          ${select('src', 'Conto di appoggio', others, b.sourceAccountId ?? others[0][0], { hint: 'Di solito il conto dove arrivano gli incassi.' })}`,
+        title: 'Riserva settimane in anticipo', submit: 'Riserva',
+        body: html`<div class="note">Riserva <b>ora</b>, una volta sola, ${formatEuro(b.weeklyCents)} per ciascuna delle settimane che scegli, dal <b>denaro libero del conto</b> che indichi. Il denaro resta dov'è (nessun bonifico). L'app <b>non ne riserva altre da sola</b>: quando una settimana scatta, usa quel denaro e ti propone il bonifico verso il conto spese. Se i soldi liberi non bastano, riserva solo quelli.</div>
+          ${select('weeks', 'Quante settimane', [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['6', '6'], ['8', '8']], '3')}
+          ${select('src', 'Dal conto', others, b.sourceAccountId ?? others[0][0])}`,
         onSubmit: async (v) => {
-          await api.commit((s, c) => C.setBudgetAdvance(s, c, { weeks: Number(v.weeks), sourceAccountId: Number(v.weeks) > 0 ? v.src : null }));
-          const r = await api.commit((s, c) => C.runBudgetFunding(s, c, { force: true }));
-          api.toast(r.shortfall > 0 ? `Riservati ${formatEuro(r.funded)} · mancano ${formatEuro(r.shortfall)}` : r.funded > 0 ? `Riservati altri ${formatEuro(r.funded)}` : 'Salvato');
+          const r = await api.commit((s, c) => C.fundAdvanceWeeks(s, c, { weeks: Number(v.weeks), accountId: v.src }));
+          api.toast(r.shortfall > 0 ? `Riservati ${formatEuro(r.reserved)} su ${formatEuro(r.wanted)}: mancano ${formatEuro(r.shortfall)}` : `Riservati ${formatEuro(r.reserved)}`);
         },
       });
     },

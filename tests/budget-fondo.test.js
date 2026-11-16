@@ -172,115 +172,119 @@ test('profilo: il fondo budget nasce NON finanziato e si finanzia da solo solo q
   assert.equal(snapshot(out.state).funds[bf.id].available, 20000);
 });
 
-// ───── Settimane finanziate in anticipo da un conto di appoggio ─────
-import { pendingTransfers } from '../src/core/derive.js';
+// ───── Settimane in anticipo: azione ESPLICITA, mai automatica; mai prelievi da altri conti ─────
+import { budgetWeeksCoverage } from '../src/core/budget.js';
 const byAcc = (s, f, a) => snapshot(s).funds[f].byAccount[a] ?? 0;
-
-test('anticipo: settimana corrente sul conto spese, settimane future sul conto di appoggio; bonifico da confermare solo per la parte corrente', async () => {
-  let { s, rev, isy, fund: f } = await setup({ cash: 10000 });     // Revolut 100 €, Isybank 1.000 €
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: isy })).state;
-  const out = await run(s, W1, { force: true }); s = out.state;
-  assert.equal(out.result.level, 22000 * 4);
-  assert.equal(out.result.shortfall, 0);
-  assert.equal(byAcc(s, f, rev), 10000);                           // tutto il libero di Revolut
-  assert.equal(byAcc(s, f, isy), 88000 - 10000);                   // il resto (parte corrente 120 + 3 settimane) su Isybank
-  assert.deepEqual(pendingTransfers(s, snapshot(s)).map((p) => [p.fromAccountId, p.cents]), [[isy, 12000]]);   // solo 120 € da spostare: le 3 settimane future restano ferme
-  assert.equal(snapshot(s).freeByAccount[isy], 100000 - 78000);
-  assert.deepEqual(validateState(s), []); assert.equal((await runIntegrityChecks(s)).ok, true);
+const resv = byAcc;
+import { pendingTransfers } from '../src/core/derive.js';
+async function withBuddy(cash = 22000) {
+  const x = await setup({ cash });
+  const bb = await C.addAccount(x.s, ctx(), { name: 'Buddy', openingCents: 100000, openingDate: '2026-01-01' });
+  return { ...x, f: x.fund, s: bb.state, buddy: bb.result };
+}
+test('anticipo: le settimane si riservano SOLO su richiesta, dal libero del conto scelto; il denaro resta dov\'è', async () => {
+  let { s, rev, buddy, f } = await withBuddy();
+  s = (await run(s, W1, { force: true })).state;                                   // 220 sul conto spese
+  const r = await C.fundAdvanceWeeks(s, ctx(), { weeks: 3, accountId: buddy }); s = r.state;
+  assert.deepEqual([r.result.reserved, r.result.shortfall], [66000, 0]);
+  assert.equal(resv(s, f, buddy), 66000); assert.equal(snapshot(s).freeByAccount[buddy], 100000 - 66000);
+  assert.equal(snapshot(s).balances[buddy], 100000);                               // nessun bonifico
+  assert.equal(pendingTransfers(s, snapshot(s), W1).length, 0);                    // settimana corrente già coperta: le future restano ferme
+  assert.deepEqual(budgetWeeksCoverage(s, W1, 5).map((w) => w.funded), [true, true, true, true, false]);   // corrente + 3 in anticipo
 });
-
-test('anticipo: se il libero non basta lo dichiara (settimane coperte parzialmente) e non va in negativo', async () => {
-  let { s, isy } = await setup({ cash: 0 });
-  s = (await C.updateBudget(s, ctx(), { weeklyCents: 40000 })).state;      // 4 settimane = 1.600 €, su Isybank ce ne sono 1.000
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: isy })).state;
+test('anticipo: se il libero non basta riserva ciò che c\'è e lo dichiara, mai in negativo', async () => {
+  let { s, rev, buddy, f } = await withBuddy();
+  s = (await C.updateBudget(s, ctx(), { weeklyCents: 40000 })).state;
+  const r = await C.fundAdvanceWeeks(s, ctx(), { weeks: 4, accountId: buddy });    // 4 × 400 = 1.600, ne ha 1.000
+  assert.deepEqual([r.result.reserved, r.result.shortfall], [100000, 60000]);
+  assert.ok(snapshot(r.state).freeByAccount[buddy] >= 0);
+});
+test('NESSUN prelievo automatico da altri conti: "Finanzia ora" usa solo il libero del conto spese', async () => {
+  let { s, rev, buddy, f } = await withBuddy(0);                                   // il conto spese non ha libero
+  const before = snapshot(s).freeByAccount[buddy];
   const out = await run(s, W1, { force: true });
-  assert.equal(out.result.funded, 100000);                         // solo ciò che c'è su Isybank
-  assert.equal(out.result.shortfall, 60000);                       // e lo dichiara
-  assert.ok(snapshot(out.state).freeByAccount[isy] >= 0);
+  assert.equal(out.result.funded, 0); assert.equal(out.result.shortfall, 22000);   // lo dichiara
+  assert.equal(snapshot(out.state).freeByAccount[buddy], before);                  // Buddy non perde un centesimo
+  assert.equal(out.state.allocations.length, 0);
 });
-
-test('anticipo: confermando il bonifico il denaro diventa spendibile sul conto spese; il lunedì dopo si ripristina il livello', async () => {
-  let { s, rev, isy, fund: f } = await setup({ cash: 0 });
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
-  s = (await run(s, W1, { force: true })).state;                    // 3 settimane su Isybank: 660
-  const pend = pendingTransfers(s, snapshot(s))[0]; assert.equal(pend.cents, 22000);
-  s = (await C.confirmFundTransfer(s, ctx(), { fundId: f, fromAccountId: isy, toAccountId: rev, cents: 22000 })).state;
-  assert.equal(byAcc(s, f, rev), 22000); assert.equal(byAcc(s, f, isy), 44000);
-  assert.equal(pendingTransfers(s, snapshot(s)).length, 0);
-  s = await spend(s, rev, 20000, '2026-06-17');                      // spendo 200
-  const out = await run(s, W2); s = out.state;                       // lunedì dopo: livello = 220 + riporto 20 (+ 2 sett.)
-  assert.equal(out.result.level, 24000 + 44000);
-  assert.equal(byAcc(s, f, rev) + byAcc(s, f, isy), 68000);
-  assert.equal(pendingTransfers(s, snapshot(s)).reduce((t, p) => t + p.cents, 0), 22000);   // un solo bonifico: una settimana
-});
-
-test('anticipo: ridurre le settimane rilascia prima il conto di appoggio; validazioni', async () => {
-  let { s, rev, isy, fund: f } = await setup({ cash: 22000 });
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
+test('il lunedì la settimana corrente si copre con quella già riservata altrove: compare il bonifico, e NON se ne pretende una nuova', async () => {
+  let { s, rev, buddy, f } = await withBuddy(22000);
   s = (await run(s, W1, { force: true })).state;
-  assert.equal(byAcc(s, f, isy), 44000);
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 0 })).state;
-  const out = await run(s, W1, { force: true }); s = out.state;
-  assert.equal(byAcc(s, f, isy), 0); assert.equal(byAcc(s, f, rev), 22000);
-  await expectError(C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: rev }), 'conto_non_valido');
-  await expectError(C.setBudgetAdvance(s, ctx(), { weeks: 9, sourceAccountId: isy }), 'settimane');
+  s = (await C.fundAdvanceWeeks(s, ctx(), { weeks: 3, accountId: buddy })).state;  // 220 su Revolut · 660 su Buddy
+  s = await spend(s, rev, 20590, W1);                                              // restano 14,10
+  // settimana nuova, con riporto spento: il budget è di nuovo 220 e i 14,10 d'avanzo tornano liberi
+  s = (await C.updateBudget(s, ctx(), { carryOver: false })).state;
+  const out = await run(s, W2); s = out.state;
+  assert.equal(out.result.released, 0); assert.equal(out.result.shortfall, 0); assert.equal(out.result.funded, 0);
+  assert.equal(byAcc(s, f, rev), 1410); assert.equal(byAcc(s, f, buddy), 66000);     // nessun nuovo prelievo: Buddy ha ancora 660
+  assert.deepEqual(pendingTransfers(s, snapshot(s), W2).map((p) => [p.fromAccountId, p.cents]), [[buddy, 20590]]);   // bonifico che porta Revolut a 220 esatti
+  s = (await C.confirmFundTransfer(s, at(W2), { fundId: f, fromAccountId: buddy, toAccountId: rev, cents: 20590, date: W2 })).state;
+  assert.equal(byAcc(s, f, rev), 22000); assert.equal(byAcc(s, f, buddy), 66000 - 20590);   // restano 2 settimane in anticipo, senza obbligo di rifarne una
+  assert.equal(pendingTransfers(s, snapshot(s), W2).length, 0);
+  assert.deepEqual(budgetWeeksCoverage(s, W2, 4).map((w) => w.funded), [true, true, true, false]);   // calendario: corrente + 2
+  const again = await run(s, W2, { force: true });
+  assert.equal(again.result.funded, 0); assert.equal(again.result.shortfall, 0);   // nessun "buco" da riempire
+  assert.deepEqual(validateState(again.state), []); assert.equal((await runIntegrityChecks(again.state)).ok, true);
 });
-
-test('anticipo: la previsione non conta due volte le settimane già finanziate', async () => {
-  let { s, isy } = await setup({ cash: 22000 });
-  const noAdv = forecast(s, W1, 40);
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
+test('con il riporto attivo il livello è 220 + avanzo; i 0,39 € non vengono più presi da nessun altro conto', async () => {
+  let { s, rev, buddy, f } = await withBuddy(22000);
   s = (await run(s, W1, { force: true })).state;
+  s = (await C.fundAdvanceWeeks(s, ctx(), { weeks: 3, accountId: buddy })).state;
+  s = await spend(s, rev, 20590, W1);                                              // avanzo 14,10 (riporto attivo)
+  const freeBuddy = snapshot(s).freeByAccount[buddy];
+  const out = await run(s, W2, { force: true });
+  assert.equal(out.result.level, 23410);                                           // 220 + 14,10
+  assert.equal(snapshot(out.state).freeByAccount[buddy], freeBuddy);               // nessun prelievo da Buddy
+});
+test('anticipo: validazioni (conto diverso dal conto spese, settimane 1–12, budget finanziato)', async () => {
+  const { s, rev, buddy } = await withBuddy();
+  await expectError(C.fundAdvanceWeeks(s, ctx(), { weeks: 2, accountId: rev }), 'conto_non_valido');
+  await expectError(C.fundAdvanceWeeks(s, ctx(), { weeks: 0, accountId: buddy }), 'settimane');
+  await expectError(C.fundAdvanceWeeks(createEmptyState(ctx()), ctx(), { weeks: 1, accountId: buddy }), 'non_attivo');
+});
+test('anticipo: la previsione non conta due volte le settimane già riservate', async () => {
+  let { s, buddy } = await withBuddy();
+  const noAdv = forecast((await run(s, W1, { force: true })).state, W1, 40);
+  s = (await run(s, W1, { force: true })).state;
+  s = (await C.fundAdvanceWeeks(s, ctx(), { weeks: 2, accountId: buddy })).state;
   const adv = forecast(s, W1, 40);
-  const fut = (f) => f.events.filter((e) => e.kind === 'budget' && e.date > W1);
-  assert.equal(fut(adv).slice(0, 2).every((e) => e.free === 0), true);       // le prime due settimane future sono già riservate
+  const fut = (x) => x.events.filter((e) => e.kind === 'budget' && e.date > W1);
+  assert.equal(fut(adv).slice(0, 2).every((e) => e.free === 0), true);
   assert.ok(fut(noAdv).every((e) => e.free < 0));
-  assert.equal(fut(adv)[0].total, -22000);                                   // ma il totale di cassa esce comunque
+  assert.equal(fut(adv)[0].total, -22000);
 });
 
 // ───── Spostare il fondo su un altro conto ─────
 test('sposta il budget: un bonifico per ciascun conto (non uno da 880), solo le parti spuntate; il conto spese del budget segue il fondo', async () => {
   let { s, rev, isy, fund: f } = await setup({ cash: 10000 });
   const bud = await C.addAccount(s, ctx(), { name: 'Buddy', openingCents: 100000, openingDate: '2026-01-01' }); s = bud.state; const buddy = bud.result;
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: buddy })).state;
   s = (await run(s, W1, { force: true })).state;
-  assert.equal(byAcc(s, f, rev), 10000); assert.equal(byAcc(s, f, buddy), 78000);
+  s = (await C.fundAdvanceWeeks(s, ctx(), { weeks: 3, accountId: buddy })).state;
+  assert.equal(byAcc(s, f, rev), 10000); assert.equal(byAcc(s, f, buddy), 66000);
   // sposto verso Isybank SOLO la parte che sta su Buddy
   const out = await C.relocateFund(s, ctx(), f, isy, { onlyFrom: [buddy] }); s = out.state;
-  assert.deepEqual(s.transfers.map((t) => [t.fromAccountId, t.toAccountId, t.cents]), [[buddy, isy, 78000]]);
-  assert.equal(byAcc(s, f, isy), 78000); assert.equal(byAcc(s, f, rev), 10000);        // la parte su Revolut non è stata toccata
+  assert.deepEqual(s.transfers.map((t) => [t.fromAccountId, t.toAccountId, t.cents]), [[buddy, isy, 66000]]);
+  assert.equal(byAcc(s, f, isy), 66000); assert.equal(byAcc(s, f, rev), 10000);        // la parte su Revolut non è stata toccata
   assert.equal(s.settings.budget.accountId, isy);                                       // il conto spese del budget ha seguito il fondo
   assert.deepEqual(pendingTransfers(s, snapshot(s)).map((p) => [p.fromAccountId, p.cents]), [[rev, 10000]]);   // il resto resta "bonifico da fare"
   assert.deepEqual(validateState(s), []); assert.equal((await runIntegrityChecks(s)).ok, true);
 });
-test('sposta il budget: se la destinazione è il conto di appoggio delle settimane in anticipo si rifiuta', async () => {
-  let { s, isy, fund: f } = await setup({ cash: 10000 });
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
-  await expectError(C.relocateFund(s, ctx(), f, isy), 'conto_appoggio');
-});
-
-test('conto spese del budget: si cambia senza bonifici; "Finanzia" non prende più dal vecchio conto', async () => {
-  let { s, rev, isy, fund: f } = await setup({ cash: 0 });                 // conto spese = Revolut (0 €), Isybank 1.000 €
+test('conto spese del budget: si cambia senza bonifici; "Finanzia" usa solo il libero del NUOVO conto spese e mai quello degli altri', async () => {
+  let { s, rev, isy, fund: f } = await setup({ cash: 5000 });                 // conto spese = Revolut (50 €), Isybank 1.000 €
   const bb = await C.addAccount(s, ctx(), { name: 'BBVA', openingCents: 500000, openingDate: '2026-01-01' }); s = bb.state; const bbva = bb.result;
   s = (await C.setBudgetAccount(s, ctx(), { accountId: bbva })).state;       // per errore finisce su BBVA
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: isy })).state;
   s = (await run(s, W1, { force: true })).state;
   assert.equal(byAcc(s, f, bbva), 22000);                                      // la settimana corrente la prende da BBVA
   s = (await C.releaseFromFund(s, ctx(), f, 22000, '', bbva)).state;
   s = (await C.setBudgetAccount(s, ctx(), { accountId: rev })).state;
   assert.equal(s.transfers.length, 0); assert.equal(s.settings.budget.accountId, rev);
   assert.equal(s.funds.find((x) => x.id === f).accountId, rev);
+  const freeBefore = [snapshot(s).freeByAccount[bbva], snapshot(s).freeByAccount[isy]];
   const out = await run(s, W1, { force: true }); s = out.state;
-  assert.equal(byAcc(s, f, bbva), 0);                                          // BBVA non viene più toccata
-  assert.equal(byAcc(s, f, isy), 88000 - byAcc(s, f, rev));                    // tutto il resto da Isybank
+  assert.equal(byAcc(s, f, rev), 5000); assert.equal(out.result.shortfall, 17000);   // tutto il libero di Revolut, il resto lo dichiara
+  assert.deepEqual([snapshot(s).freeByAccount[bbva], snapshot(s).freeByAccount[isy]], freeBefore);   // BBVA e Isybank intatti
   assert.deepEqual(validateState(s), []);
 });
-test('conto spese del budget: non può coincidere col conto delle settimane in anticipo', async () => {
-  let { s, isy } = await setup({ cash: 10000 });
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 2, sourceAccountId: isy })).state;
-  await expectError(C.setBudgetAccount(s, ctx(), { accountId: isy }), 'conto_appoggio');
-});
-
 // ───── "Finanzia ora" a metà settimana non rifinanzia ciò che è già stato speso ─────
 test('a metà settimana "Finanzia ora" non riporta il fondo a 220: il livello è ciò che RESTA', async () => {
   let { s, rev, isy, fund: f } = await setup({ cash: 100000 });
@@ -293,36 +297,3 @@ test('a metà settimana "Finanzia ora" non riporta il fondo a 220: il livello è
   assert.equal(snapshot(out.state).freeByAccount[rev], snapshot(s).freeByAccount[rev]);   // nessun denaro libero toccato
 });
 
-test('con settimane in anticipo e spese già fatte: il totale riservato è già quello dovuto, nessun prelievo dal conto di appoggio', async () => {
-  let { s, rev, isy, fund: f } = await setup({ cash: 100000 });
-  const bb = await C.addAccount(s, ctx(), { name: 'BBVA', openingCents: 15039, openingDate: '2026-01-01' }); s = bb.state; const bbva = bb.result;
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: isy })).state;
-  s = (await run(s, W1, { force: true })).state;                                         // 220 su Revolut + 660 su Isybank
-  s = await spend(s, rev, 16590, W1);                                                    // restano 54,10 + 660
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: bbva })).state;   // cambio conto di appoggio
-  const before = snapshot(s).freeByAccount[bbva];
-  const out = await run(s, W1, { force: true });
-  assert.equal(out.result.shortfall, 0);
-  assert.equal(snapshot(out.state).freeByAccount[bbva], before);                         // BBVA non perde nemmeno un centesimo
-  assert.equal(out.result.level, 5410 + 66000);
-});
-
-// ───── Passaggio di settimana con settimane in anticipo: serve il bonifico della settimana che inizia ─────
-test('lunedì: una delle settimane in anticipo diventa corrente → compare il bonifico verso il conto spese; dopo la conferma tutto torna a regime', async () => {
-  let { s, rev, fund: f } = await setup({ cash: 22000 });
-  const bb = await C.addAccount(s, ctx(), { name: 'BBVA', openingCents: 100000, openingDate: '2026-01-01' }); s = bb.state; const bbva = bb.result;
-  s = (await C.setBudgetAdvance(s, ctx(), { weeks: 3, sourceAccountId: bbva })).state;
-  s = (await run(s, W1, { force: true })).state;                                   // Revolut 220 · BBVA 660
-  assert.equal(pendingTransfers(s, snapshot(s), W1).length, 0);
-  s = await spend(s, rev, 20590, W1);                                              // restano 14,10 sul conto spese
-  assert.equal(byAcc(s, f, rev), 1410);
-  assert.equal(pendingTransfers(s, snapshot(s), W2).length, 1);                    // nella settimana nuova: 234,10 dovuti, 14,10 sul conto spese
-  assert.deepEqual(pendingTransfers(s, snapshot(s), W2).map((p) => [p.fromAccountId, p.cents]), [[bbva, 22000]]);
-  const out = await run(s, W2); s = out.state;                                     // si ripristina il livello (un'altra settimana in anticipo) dal libero di BBVA
-  assert.equal(out.result.shortfall, 0); assert.equal(byAcc(s, f, bbva), 66000 + 22000);
-  assert.deepEqual(pendingTransfers(s, snapshot(s), W2).map((p) => [p.fromAccountId, p.cents]), [[bbva, 22000]]);
-  s = (await C.confirmFundTransfer(s, at(W2), { fundId: f, fromAccountId: bbva, toAccountId: rev, cents: 22000, date: W2 })).state;
-  assert.equal(byAcc(s, f, rev), 1410 + 22000); assert.equal(byAcc(s, f, bbva), 66000);
-  assert.equal(pendingTransfers(s, snapshot(s), W2).length, 0);
-  assert.deepEqual(validateState(s), []); assert.equal((await runIntegrityChecks(s)).ok, true);
-});

@@ -468,7 +468,6 @@ export function relocateFund(state, ctx, id, newAccountId, { onlyFrom = null } =
     req(f.accountId !== to.id && !to.archived, 'conto', 'Scegli un conto diverso e attivo');
     const b = s.settings.budget;
     const isBudget = f.id === b.fundId;
-    req(!(isBudget && b.sourceAccountId === to.id && b.advanceWeeks > 0), 'conto_appoggio', 'Questo è anche il conto di appoggio delle settimane in anticipo: cambia prima quello');
     // Si sposta (con un bonifico registrato PER CIASCUN conto) solo la parte riservata su conti diversi dalla destinazione e, se indicato, tra quelli scelti.
     for (const [acc, c] of Object.entries(snapshot(s).funds[id].byAccount)) {
       if (acc === to.id || c <= 0) continue;
@@ -980,15 +979,18 @@ export function disableBudgetFund(state, ctx) {
   });
 }
 /**
- * Finanzia la settimana: porta il fondo budget al livello dovuto (settimanale + riporto; avanzo riportato, sforo sottratto),
- * usando SOLO denaro libero del conto spese. Se il libero non basta finanzia quello che c'è e ti dice quanto manca.
- * Una volta a settimana (all'apertura dell'app) o su richiesta (`force`). Con saldo "da aggiornare" non fa nulla.
- * @returns result {level, funded, released, shortfall, skipped}
+ * Finanzia la SETTIMANA CORRENTE sul conto spese: il fondo budget sul conto spese deve valere ciò che RESTA del budget della
+ * settimana (settimanale + eventuale riporto − già speso).
+ *  • se le settimane riservate in anticipo su altri conti coprono già quella cifra, non serve altro: compare il "bonifico da fare";
+ *  • altrimenti si riserva dal denaro LIBERO DEL CONTO SPESE (mai da altri conti) e si dichiara quanto manca;
+ *  • se il conto spese ha riservato più del dovuto (avanzo non riportato), l'eccedenza torna libera.
+ * Non rinnova mai da sola le settimane in anticipo: quelle le riservi tu (fundAdvanceWeeks).
+ * @returns result {level, funded, released, shortfall, pool, skipped}
  */
 export function runBudgetFunding(state, ctx, { force = false } = {}) {
   return mutate(state, ctx, (s, log) => {
     const b = s.settings.budget;
-    const res = { level: 0, funded: 0, released: 0, shortfall: 0, skipped: null, advanceWeeks: b.advanceWeeks ?? 0 };
+    const res = { level: 0, funded: 0, released: 0, shortfall: 0, pool: 0, skipped: null };
     if (!b.fundId || !b.accountId || b.weeklyCents <= 0) { res.skipped = 'non_attivo'; return res; }
     const acc = find(s.accounts, b.accountId, 'Conto spese');
     const f = find(s.funds, b.fundId, 'Fondo budget');
@@ -996,39 +998,26 @@ export function runBudgetFunding(state, ctx, { force = false } = {}) {
     if (!force && b.lastFundedWeek && b.lastFundedWeek >= wk) { res.skipped = 'gia_fatto'; return res; }
     if (acc.balanceUnknown) { res.skipped = 'saldo_da_aggiornare'; return res; }
     if (ctx.today < b.startDate) { res.skipped = 'non_iniziato'; return res; }
-    const adv = b.advanceWeeks ?? 0;
-    const src = adv > 0 && b.sourceAccountId ? s.accounts.find((a) => a.id === b.sourceAccountId && !a.archived) : null;
-    const cur = budgetFundLevel(s, ctx.today);                   // ciò che RESTA della settimana corrente (già dedotto il speso) → sul conto spese
-    const target = cur + (src ? adv * b.weeklyCents : 0);        // + settimane in anticipo → sul conto di appoggio
+    const cur = budgetFundLevel(s, ctx.today);                   // ciò che RESTA della settimana corrente
     const snap = snapshot(s);
     const by = snap.funds[f.id].byAccount;
     const haveAcc = by[acc.id] ?? 0;
-    const others = Object.entries(by).filter(([id, c]) => id !== acc.id && c > 0);
-    const haveOther = others.reduce((t, [, c]) => t + c, 0);
-    const total = haveAcc + haveOther;
-    res.level = target;
-    if (total < target) {
-      let deficit = target - total, given = 0;
-      const give = (account, max, why) => {
-        const g = Math.min(deficit, max, Math.max(0, snap.freeByAccount[account.id]));
-        if (g > 0) {
-          const al = pushAllocation(s, ctx, f.id, g, 'assign', 'Finanziamento del budget', null, account.id);
-          log('allocate', 'allocation', al.id, null, al, `${why}: ${formatEuro(g)} da ${account.name} (livello dovuto ${formatEuro(target)})`);
-          deficit -= g; given += g; snap.freeByAccount[account.id] -= g;
-        }
-      };
-      give(acc, Math.max(0, cur - haveAcc), 'Budget della settimana finanziato');
-      if (src && !src.balanceUnknown && deficit > 0) give(src, deficit, 'Settimane future finanziate');
-      res.funded = given; res.shortfall = deficit;
-    } else if (total > target) {
-      let out = total - target;                                  // avanzo non riportato (o budget ridotto): torna libero
-      const order = [...others.map(([id, c]) => [id, c]), [acc.id, haveAcc]];
-      for (const [id, c] of order) {
-        const r = Math.min(out, c); if (r <= 0) continue;
-        const al = pushAllocation(s, ctx, f.id, -r, 'release', 'Budget: eccedenza rilasciata', null, id);
-        log('release', 'allocation', al.id, null, al, `Eccedenza del budget rilasciata: ${formatEuro(r)}`);
-        out -= r; res.released += r;
+    const pool = Object.entries(by).filter(([id, c]) => id !== acc.id && c > 0).reduce((t, [, c]) => t + c, 0);   // settimane già riservate su altri conti
+    res.level = cur; res.pool = pool;
+    if (haveAcc < cur) {
+      const need = cur - haveAcc;
+      const stillNeeded = Math.max(0, need - pool);               // la parte non coperta dalle settimane già riservate altrove
+      const g = Math.min(stillNeeded, Math.max(0, snap.freeByAccount[acc.id]));
+      if (g > 0) {
+        const al = pushAllocation(s, ctx, f.id, g, 'assign', 'Finanziamento del budget', null, acc.id);
+        log('allocate', 'allocation', al.id, null, al, `Budget della settimana finanziato: ${formatEuro(g)} dal libero di ${acc.name} (dovuto ${formatEuro(cur)})`);
       }
+      res.funded = g; res.shortfall = stillNeeded - g;
+    } else if (haveAcc > cur) {
+      const out = haveAcc - cur;                                  // avanzo non riportato (o budget ridotto): torna libero
+      const al = pushAllocation(s, ctx, f.id, -out, 'release', 'Budget: eccedenza rilasciata', null, acc.id);
+      log('release', 'allocation', al.id, null, al, `Eccedenza del budget rilasciata: ${formatEuro(out)}`);
+      res.released = out;
     }
     if (!force || !b.lastFundedWeek || b.lastFundedWeek < wk) { const bb = copy(b); b.lastFundedWeek = wk; log('update', 'budget', 'budget', bb, copy(b), `Settimana del ${wk} finanziata`); }
     return res;
@@ -1037,7 +1026,7 @@ export function runBudgetFunding(state, ctx, { force = false } = {}) {
 /**
  * Cambia il CONTO SPESE del budget (dove sta la settimana corrente e da cui spendi) senza registrare bonifici:
  * cambia solo il conto di riferimento del fondo. Le riserve già presenti su altri conti restano dove sono
- * (la parte oltre le settimane in anticipo comparirà come "bonifico da fare").
+ * (la parte che serve alla settimana corrente comparirà come "bonifico da fare").
  */
 export function setBudgetAccount(state, ctx, { accountId }) {
   return mutate(state, ctx, (s, log) => {
@@ -1046,29 +1035,38 @@ export function setBudgetAccount(state, ctx, { accountId }) {
     const acc = find(s.accounts, accountId, 'Conto spese');
     req(!acc.archived && acc.type !== 'investment', 'conto_non_valido', 'Scegli un conto liquido');
     req(acc.id !== b.accountId, 'conto', 'È già il conto spese del budget');
-    req(!(b.advanceWeeks > 0 && b.sourceAccountId === acc.id), 'conto_appoggio', 'Questo è il conto delle settimane in anticipo: cambia prima quello');
     const f = find(s.funds, b.fundId, 'Fondo budget');
     const fb = copy(f), bb = copy(b);
     f.accountId = acc.id; b.accountId = acc.id;
+    if (b.sourceAccountId === acc.id) b.sourceAccountId = null;
     log('update', 'fund', f.id, fb, copy(f), 'Conto spese del budget cambiato (nessun bonifico registrato)');
     log('update', 'budget', 'budget', bb, copy(b), 'Conto spese del budget cambiato');
   });
 }
-/** Finanzia in anticipo da 0 a 4 settimane future usando il denaro libero di un conto di appoggio (virtuale finché non confermi il bonifico). */
-export function setBudgetAdvance(state, ctx, { weeks, sourceAccountId = null }) {
+/**
+ * Riserva SUBITO N settimane future (N × budget settimanale) dal denaro libero di un conto che scegli tu. Azione esplicita:
+ * l'app non la ripete e non rinnova da sola le settimane. Il denaro resta dov'è (vincolo virtuale); quando la settimana scatta,
+ * compare il "bonifico da fare" verso il conto spese. Riserva solo ciò che c'è di libero e dichiara quanto manca.
+ */
+export function fundAdvanceWeeks(state, ctx, { weeks, accountId }) {
   return mutate(state, ctx, (s, log) => {
     const b = s.settings.budget;
     req(b.fundId, 'non_attivo', 'Attiva prima il finanziamento del budget');
-    req(Number.isInteger(weeks) && weeks >= 0 && weeks <= 4, 'settimane', 'Scegli da 0 a 4 settimane');
+    req(Number.isInteger(weeks) && weeks >= 1 && weeks <= 12, 'settimane', 'Scegli da 1 a 12 settimane');
+    const src = find(s.accounts, accountId, 'Conto');
+    req(!src.archived && src.type !== 'investment', 'conto_non_valido', 'Scegli un conto liquido');
+    req(src.id !== b.accountId, 'conto_non_valido', 'Scegli un conto diverso dal conto spese');
+    req(!src.balanceUnknown, 'saldo_da_aggiornare', `Aggiorna prima il saldo di ${src.name}`);
+    const want = weeks * b.weeklyCents;
+    const give = Math.min(want, Math.max(0, snapshot(s).freeByAccount[src.id]));
     const before = copy(b);
-    if (weeks > 0) {
-      const src = find(s.accounts, sourceAccountId, 'Conto di appoggio');
-      req(!src.archived && src.type !== 'investment', 'conto_non_valido', 'Scegli un conto liquido');
-      req(src.id !== b.accountId, 'conto_non_valido', 'Il conto di appoggio deve essere diverso dal conto spese');
-      b.sourceAccountId = src.id;
-    } else b.sourceAccountId = b.sourceAccountId ?? null;
-    b.advanceWeeks = weeks;
-    log('update', 'budget', 'budget', before, copy(b), weeks ? `Finanziamento anticipato: ${weeks} settimane` : 'Finanziamento anticipato disattivato');
+    b.sourceAccountId = src.id;                                    // conto proposto la volta dopo
+    if (give > 0) {
+      const al = pushAllocation(s, ctx, b.fundId, give, 'assign', 'Settimane di budget riservate in anticipo', null, src.id);
+      log('allocate', 'allocation', al.id, null, al, `Settimane in anticipo riservate: ${formatEuro(give)} su ${src.name} (richiesti ${formatEuro(want)})`);
+    }
+    log('update', 'budget', 'budget', before, copy(b));
+    return { reserved: give, shortfall: want - give, wanted: want };
   });
 }
 

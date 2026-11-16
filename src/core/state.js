@@ -110,7 +110,7 @@ export function migrateState(st) {
   for (const t of st.invoiceTemplates ?? []) { t.reserveCents ??= null; t.review ??= false; t.note ??= ''; t.origin ??= null; }
   st.settings.taxProfile.verifiedYear ??= null;
   st.settings.taxProfile.opening ??= null;
-  st.settings.budget.advanceWeeks ??= 0; st.settings.budget.sourceAccountId ??= null;
+  st.settings.budget.advanceWeeks = 0; st.settings.budget.sourceAccountId ??= null;   // settimane in anticipo: ora è un'azione esplicita, non una regola
   st.settings.taxProfile.inpsDeduction ??= 'accrued';
   if (st.settings.budget) { st.settings.budget.accountId ??= null; st.settings.budget.fundId ??= null; st.settings.budget.lastFundedWeek ??= null; }
   for (const p of st.planned ?? []) { p.categoryId ??= 'cat_other'; p.autoPay ??= false; p.remindDays ??= 2; p.confirm ??= null; p.origin ??= null; p.toAccountId ??= null; p.autoExecute ??= false; }

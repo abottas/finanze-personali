@@ -9,7 +9,7 @@ import { estimateTaxes, taxLedger } from '../core/tax.js';
 import { monthlyPace } from '../core/allocation.js';
 import { BANKS } from '../core/palette.js';
 import { snapshot, fundNeed, pendingTransfers, reserveProgress, fundProgress, childFunds } from '../core/derive.js';
-import { budgetStatus, countsInWeeklyBudget } from '../core/budget.js';
+import { budgetStatus, countsInWeeklyBudget, budgetWeeksCoverage } from '../core/budget.js';
 import { forecast, expandPlanned } from '../core/forecast.js';
 import { formatEuro } from '../core/money.js';
 import { formatDate, formatDateLong, diffDays, addDays as addDaysD } from '../core/dates.js';
@@ -82,21 +82,30 @@ export function pendingCard(app, snap) {
 }
 
 /** Riga "finanziamento" del budget: quanto è riservato davvero rispetto a quanto serve questa settimana. */
-function budgetFundLine(st, snap, bs) {
+/** Vista a calendario delle settimane finanziate (corrente + prossime). */
+function weeksCalendar(st, today, n = 6) {
+  const cov = budgetWeeksCoverage(st, today, n);
+  if (!cov.length) return '';
+  const lbl = (w) => `${formatDate(w.weekStart)} – ${formatDate(w.weekEnd)}`;
+  const future = cov.filter((w) => !w.current && w.funded).length;
+  return html`<div class="weeks mt12"><div class="small muted">Settimane finanziate · ${future} ${future === 1 ? 'in anticipo oltre la corrente' : 'in anticipo oltre la corrente'}</div>
+    <ul class="list wk">${cov.map((w) => html`<li class="item"><div class="grow"><div class="t">${lbl(w)}${w.current ? ' · corrente' : ''}</div></div><div class="r">${w.funded ? pill('finanziata', 'pos') : pill('non finanziata', 'warn')}</div></li>`)}</ul></div>`;
+}
+/** Riga "finanziamento" del budget: la SETTIMANA CORRENTE è coperta? (le settimane in anticipo sono una scelta tua, non un obbligo) */
+function budgetFundLine(st, snap, bs, today) {
   const b = st.settings.budget;
   if (!b.fundId) return html`<div class="note">Il budget è solo un <b>tetto di spesa</b>: non riserva denaro. <button class="link-btn small" data-nav="settings/budget">Finanzialo come un fondo</button></div>`;
-  const have = snap.funds[b.fundId]?.available ?? 0;
-  const adv = b.advanceWeeks ?? 0;
-  const week = Math.max(0, bs.remainingCents);
-  const need = week + adv * b.weeklyCents;
-  const short = Math.max(0, need - have);
+  const by = snap.funds[b.fundId]?.byAccount ?? {};
+  const haveAcc = by[b.accountId] ?? 0;
+  const pool = Object.entries(by).filter(([id, c]) => id !== b.accountId && c > 0).reduce((t, [, c]) => t + c, 0);
+  const need = Math.max(0, bs.remainingCents);
+  const short = Math.max(0, need - haveAcc - pool);
   const acc = st.accounts.find((a) => a.id === b.accountId);
-  const src = adv > 0 ? st.accounts.find((a) => a.id === b.sourceAccountId) : null;
-  const where = [acc?.name ?? 'conto spese', src?.name].filter(Boolean).join(' o ');
-  const parts = adv > 0 ? `settimana corrente ${formatEuro(week)} + ${adv} ${adv === 1 ? 'settimana' : 'settimane'} in anticipo ${formatEuro(adv * b.weeklyCents)}` : '';
+  const cov = budgetWeeksCoverage(st, today, 12);
+  const ahead = cov.filter((w) => !w.current && w.funded).length;
   return short > 0
-    ? html`<div class="alert">${I.warn}<span class="grow">Budget <b>non del tutto finanziato</b>: riservati ${formatEuro(have)} su ${formatEuro(need)}${parts ? ` (${parts})` : ''}. Mancano <b>${formatEuro(short)}</b>${acc?.balanceUnknown ? `: aggiorna il saldo di ${acc.name}` : ` di denaro libero (su ${where})`}.</span><button class="btn sm primary inline" data-action="budget-fund-now">Finanzia ora</button></div>`
-    : html`<div class="small muted mt8">🧺 Finanziato: ${formatEuro(have)} riservati${adv ? ` (settimana corrente + ${adv} in anticipo)` : ` sul conto ${acc?.name ?? ''}`} · non sono liberi da spendere altrove.</div>`;
+    ? html`<div class="alert">${I.warn}<span class="grow">Settimana <b>non finanziata</b>: riservati ${formatEuro(haveAcc + pool)} su ${formatEuro(need)}. Mancano <b>${formatEuro(short)}</b>${acc?.balanceUnknown ? `: aggiorna il saldo di ${acc.name}` : ` di denaro libero su ${acc?.name ?? 'conto spese'}`}.</span><button class="btn sm primary inline" data-action="budget-fund-now">Finanzia ora</button></div>`
+    : html`<div class="small muted mt8">🧺 Settimana finanziata${pool > 0 && haveAcc < need ? ` (parte da trasferire su ${acc?.name ?? ''}: bonifico in corso)` : ''}${ahead ? ` · ${ahead} ${ahead === 1 ? 'settimana' : 'settimane'} in anticipo già riservate` : ''}.</div>`;
 }
 
 const flowLegend = () => html`<div class="legend"><span><i class="lg-inc"></i>Incassi</span><span><i class="lg-exp"></i>Spese</span><span><i class="lg-tax"></i>Riserva fiscale</span><span><i class="lg-inv"></i>Investito</span><span><i class="lg-net"></i>Disponibile</span></div>`;
@@ -186,7 +195,7 @@ export function viewOverview(app) {
         <div class="row between"><div><div class="small muted">Residuo (${formatDate(bs.weekStart)} – ${formatDate(bs.weekEnd)})</div><div class="num" data-big>${amt(bs.remainingCents, { tone: true })}</div></div>
         <div class="r small muted">Speso ${amt(bs.spentCents)}<br>su ${amt(bs.baseCents + bs.carryCents)}</div></div>
         <div class="bar-wrap">${bar(pctOf(bs.spentCents, bs.baseCents + bs.carryCents), bs.remainingCents < 0 ? 'neg' : bs.remainingCents < (bs.baseCents + bs.carryCents) * 0.2 ? 'warn' : 'pos')}</div>
-        ${budgetFundLine(st, snap, bs)}
+        ${budgetFundLine(st, snap, bs, today)}
         ${bs.carryCents !== 0 ? html`<div class="small muted">${bs.carryCents > 0 ? 'Avanzo riportato' : 'Disavanzo riportato'}: ${amt(bs.carryCents, { plus: true })}</div>` : ''}`}
     </section>
 
@@ -457,10 +466,11 @@ function settingsBudget(app, back) {
       <span class="k">Riporto avanzi</span><span>${b.carryOver ? 'Sì' : 'No'}</span><span class="k">Riporto disavanzi</span><span>${b.carryOver && b.carryDeficit ? 'Sì' : 'No'}</span></div>
       <div class="note">Contano le uscite effettive in categorie "nel budget" (non le scadenze programmate come corso o abbonamenti, che sono impegni a parte).</div></section>
     <section class="card"><h2>Finanziamento del budget ${b.fundId ? pill('attivo', 'pos') : pill('non attivo')}</h2>
-      ${b.fundId ? html`<p class="small mt0">Ogni settimana l'app <b>riserva</b> il budget dal denaro libero di <b>${st.accounts.find((a) => a.id === b.accountId)?.name}</b>: i soldi restano sul conto ma non sono più "liberi". Le spese del budget consumano il fondo. <b>Avanzo</b> riportato; <b>sforo</b> sottratto dalla settimana dopo. Mai oltre il denaro libero: se non basta, ti dice quanto manca.</p>
+      ${b.fundId ? html`<p class="small mt0">Ogni settimana l'app <b>riserva</b> il budget dal denaro libero del conto spese <b>${st.accounts.find((a) => a.id === b.accountId)?.name}</b>: i soldi restano sul conto ma non sono più "liberi". Non prende <b>mai</b> denaro da altri conti da sola: le settimane in anticipo le riservi tu. Le spese del budget consumano il fondo. <b>Avanzo</b> riportato; <b>sforo</b> sottratto dalla settimana dopo. Mai oltre il denaro libero: se non basta, ti dice quanto manca.</p>
         <div class="kv mt8"><span class="k">Conto spese (settimana corrente)</span><span>${st.accounts.find((a) => a.id === b.accountId)?.name ?? '—'} <button class="link-btn small" data-action="budget-account">Cambia</button></span>
-        <span class="k">Settimane finanziate in anticipo</span><span>${b.advanceWeeks ? `${b.advanceWeeks} · da ${st.accounts.find((a) => a.id === b.sourceAccountId)?.name ?? '—'}` : 'nessuna'}</span></div>
-        <div class="btn-row"><button class="btn primary" data-action="budget-fund-now">Finanzia ora</button><button class="btn" data-action="budget-advance">Settimane in anticipo</button></div>
+      </div>
+        ${weeksCalendar(st, app.today)}
+        <div class="btn-row"><button class="btn primary" data-action="budget-fund-now">Finanzia la settimana</button><button class="btn" data-action="budget-advance">Riserva settimane in anticipo</button></div>
         <div class="spacer10"></div><button class="btn danger block" data-action="budget-fund-off">Disattiva</button>`
       : html`<p class="small mt0">Con 500 € in conto e un budget di 220 €, i 220 vanno <b>riservati</b>: il libero vero è 280. Attiva il finanziamento per trattare il budget come un fondo, ogni settimana.</p>
         <button class="btn primary block" data-action="budget-fund-setup" ${b.weeklyCents > 0 ? '' : raw('disabled')}>Finanzia il budget come un fondo</button>${b.weeklyCents > 0 ? '' : html`<div class="small muted mt8">Imposta prima l'importo settimanale.</div>`}`}</section>
