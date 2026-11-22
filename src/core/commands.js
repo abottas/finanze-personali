@@ -11,7 +11,7 @@ import { COLOR_KEYS, BANKS } from './palette.js';
 import { snapshot, balanceOf } from './derive.js';
 import { validateState } from './validate.js';
 import { appendAudit } from './audit.js';
-import { budgetFundLevel, countsInWeeklyBudget } from './budget.js';
+import { budgetFundLevel, budgetStatus, countsInWeeklyBudget } from './budget.js';
 import { validateProfile } from './profile.js';
 
 async function mutate(state, ctx, fn) {
@@ -374,6 +374,7 @@ export function releaseFromFund(state, ctx, fundId, cents, note = '', accountId 
     const avail = acc ? (by[acc] ?? 0) : 0;
     req(cents <= avail, 'disponibile_insufficiente', `Su quel conto il fondo ha riservato solo ${formatEuro(avail)}`);
     const al = pushAllocation(s, ctx, fundId, -cents, 'release', note, null, acc);
+    al.manual = true;                                   // rilascio fatto dall'utente (il budget lo legge come "rinuncia" alla parte della settimana)
     log('release', 'allocation', al.id, null, al, `Rilasciati ${formatEuro(cents)} da "${f.name}" al denaro libero di ${accName(s, acc)}`);
   });
 }
@@ -998,10 +999,22 @@ export function runBudgetFunding(state, ctx, { force = false } = {}) {
     if (!force && b.lastFundedWeek && b.lastFundedWeek >= wk) { res.skipped = 'gia_fatto'; return res; }
     if (acc.balanceUnknown) { res.skipped = 'saldo_da_aggiornare'; return res; }
     if (ctx.today < b.startDate) { res.skipped = 'non_iniziato'; return res; }
-    const cur = budgetFundLevel(s, ctx.today);                   // ciò che RESTA della settimana corrente
+    const bs = budgetStatus(s, ctx.today);
+    const cur = Math.max(0, bs.remainingCents);                  // ciò che RESTA della settimana corrente (già dedotto speso e rinunce) → sul conto spese
     const snap = snapshot(s);
     const by = snap.funds[f.id].byAccount;
-    const haveAcc = by[acc.id] ?? 0;
+    let haveAcc = by[acc.id] ?? 0;
+    // Nuova settimana e riporto spento: l'avanzo della settimana scorsa torna LIBERO (non si somma alla settimana nuova).
+    if (!b.lastFundedWeek || b.lastFundedWeek < wk) {
+      if (!b.carryOver && haveAcc > 0) {
+        const rel = Math.min(haveAcc, Math.max(0, bs.prevWeekRemainingCents));
+        if (rel > 0) {
+          const al = pushAllocation(s, ctx, f.id, -rel, 'release', 'Budget: avanzo della settimana scorsa tornato libero', null, acc.id);
+          log('release', 'allocation', al.id, null, al, `Avanzo della settimana scorsa rilasciato: ${formatEuro(rel)} su ${acc.name}`);
+          haveAcc -= rel; by[acc.id] = haveAcc; snap.freeByAccount[acc.id] += rel; res.released += rel;
+        }
+      }
+    }
     const pool = Object.entries(by).filter(([id, c]) => id !== acc.id && c > 0).reduce((t, [, c]) => t + c, 0);   // settimane già riservate su altri conti
     res.level = cur; res.pool = pool;
     if (haveAcc < cur) {

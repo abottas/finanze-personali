@@ -24,7 +24,7 @@ export function countsInWeeklyBudget(state, t) {
 export function budgetStatus(state, today) {
   const b = state.settings.budget;
   const startsOn = state.settings.weekStartsOn;
-  const out = { started: false, weekStart: weekStart(today, startsOn), weekEnd: null, baseCents: b.weeklyCents, carryCents: 0, spentCents: 0, remainingCents: 0, weeks: [] };
+  const out = { started: false, weekStart: weekStart(today, startsOn), weekEnd: null, baseCents: b.weeklyCents, carryCents: 0, spentCents: 0, givenUpCents: 0, remainingCents: 0, prevWeekRemainingCents: 0, weeks: [] };
   out.weekEnd = addDays(out.weekStart, 6);
   if (b.weeklyCents <= 0 || today < b.startDate) return out;
   out.started = true;
@@ -36,13 +36,24 @@ export function budgetStatus(state, today) {
     const ws = weekStart(t.date, startsOn);
     spentByWeek.set(ws, (spentByWeek.get(ws) ?? 0) - t.cents);
   }
+  // RINUNCIA: un "Rilascia" fatto a mano sul fondo budget, sul conto spese, vuol dire "questa parte della settimana non la uso":
+  // riduce il residuo (nei limiti di ciò che restava) e non si riporta. Gli sblocchi automatici dell'app non contano.
+  const givenByWeek = new Map();
+  if (b.fundId) for (const a of state.allocations) {
+    if (a.fundId !== b.fundId || a.accountId !== b.accountId || a.kind !== 'release' || !a.manual) continue;
+    if (a.date < b.startDate || a.date > today) continue;
+    const w = weekStart(a.date, startsOn);
+    givenByWeek.set(w, (givenByWeek.get(w) ?? 0) - a.cents);
+  }
   let ws = weekStart(b.startDate, startsOn);
-  let carry = 0;
+  let carry = 0, prevRemaining = 0;
   for (let guard = 0; guard < 1100 && ws <= out.weekStart; guard++) {
     const spent = spentByWeek.get(ws) ?? 0;
-    const remaining = b.weeklyCents + carry - spent;
-    out.weeks.push({ weekStart: ws, base: b.weeklyCents, carry, spent, remaining });
-    if (ws === out.weekStart) { out.carryCents = carry; out.spentCents = spent; out.remainingCents = remaining; break; }
+    const given = Math.min(givenByWeek.get(ws) ?? 0, Math.max(0, b.weeklyCents + carry - spent));
+    const remaining = b.weeklyCents + carry - spent - given;
+    out.weeks.push({ weekStart: ws, base: b.weeklyCents, carry, spent, givenUp: given, remaining });
+    if (ws === out.weekStart) { out.carryCents = carry; out.spentCents = spent; out.givenUpCents = given; out.remainingCents = remaining; out.prevWeekRemainingCents = prevRemaining; break; }
+    prevRemaining = remaining;
     carry = b.carryOver ? (b.carryDeficit ? remaining : Math.max(0, remaining)) : 0;
     ws = addDays(ws, 7);
   }

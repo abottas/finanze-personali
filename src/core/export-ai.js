@@ -108,8 +108,8 @@ export function buildAiExport(state, { today, nowIso, appVersion = null }) {
     weeklyCents: b.weeklyCents, startDate: b.startDate, carryOverSurplus: !!b.carryOver, carryOverDeficit: !!b.carryDeficit,
     fundedAsFund: !!b.fundId, fundId: b.fundId ?? null, spendingAccountId: b.accountId ?? null, advanceSourceAccountId: b.sourceAccountId ?? null, weeksCoverage: budgetWeeksCoverage(state, today, 8).map((w) => ({ weekStart: w.weekStart, weekEnd: w.weekEnd, isCurrent: !!w.current, funded: w.funded })), lastFundedWeek: b.lastFundedWeek ?? null,
     fundReservedByAccount: b.fundId ? Object.entries(snap.funds[b.fundId].byAccount).filter(([, c]) => c !== 0).map(([accountId, cents]) => ({ accountId, cents })) : [],
-    currentWeek: { started: bs.started, weekStart: bs.weekStart, weekEnd: bs.weekEnd, baseCents: bs.baseCents, carryCents: bs.carryCents, spentCents: bs.spentCents, remainingCents: bs.remainingCents },
-    weeks: bs.weeks.map((w) => ({ weekStart: w.weekStart, baseCents: w.base, carryCents: w.carry, spentCents: w.spent, remainingCents: w.remaining })),
+    currentWeek: { started: bs.started, weekStart: bs.weekStart, weekEnd: bs.weekEnd, baseCents: bs.baseCents, carryCents: bs.carryCents, spentCents: bs.spentCents, givenUpCents: bs.givenUpCents, remainingCents: bs.remainingCents },
+    weeks: bs.weeks.map((w) => ({ weekStart: w.weekStart, baseCents: w.base, carryCents: w.carry, spentCents: w.spent, givenUpCents: w.givenUp ?? 0, remainingCents: w.remaining })),
   };
   const expenses = {
     incurredExpenses: 'Spese già sostenute: vedi movements.transactions con kind = "expense" (e "investment" per i versamenti), status = "posted". Una sola lista, nessuna copia qui.',
@@ -141,7 +141,7 @@ export function buildAiExport(state, { today, nowIso, appVersion = null }) {
     note: 'Registri effettivi: ogni movimento compare una sola volta. I trasferimenti non sono entrate né uscite; le allocazioni sono vincoli virtuali (non muovono denaro in banca).',
     transactions: state.transactions.map((t) => ({ id: t.id, date: t.date, accountId: t.accountId, kind: t.kind, amountCents: t.cents, categoryId: t.categoryId ?? null, categoryName: catById[t.categoryId]?.name ?? null, fundId: t.fundId ?? null, plannedId: t.plannedId ?? null, receivableId: t.receivableId ?? null, note: t.note || null, status: t.status, voidReason: t.voidReason ?? null, weeklyBudgetFlag: t.weeklyBudget ?? null, countsInWeeklyBudget: countsInWeeklyBudget(state, t), budgetReserveReleasedCents: t.budgetReleaseCents ?? null, refillFundId: t.refillFundId ?? null, refillCents: t.refillCents ?? null })),
     transfers: state.transfers.map((t) => ({ id: t.id, date: t.date, fromAccountId: t.fromAccountId, toAccountId: t.toAccountId, amountCents: t.cents, purpose: t.purpose ?? null, fundId: t.fundId ?? null, plannedId: t.plannedId ?? null, note: t.note || null, status: t.status, voidReason: t.voidReason ?? null })),
-    allocations: state.allocations.map((a) => ({ id: a.id, date: a.date, fundId: a.fundId, accountId: a.accountId, amountCents: a.cents, kind: a.kind, moveId: a.moveId ?? null, receivableId: a.receivableId ?? null, note: a.note || null })),
+    allocations: state.allocations.map((a) => ({ id: a.id, date: a.date, fundId: a.fundId, accountId: a.accountId, amountCents: a.cents, kind: a.kind, moveId: a.moveId ?? null, receivableId: a.receivableId ?? null, manualRelease: !!a.manual, note: a.note || null })),
     bankReconciliations: state.reconciliations.map((r) => pick(r, ['id', 'accountId', 'date', 'bankCents', 'resolvedTxId'])),
   };
 

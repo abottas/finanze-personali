@@ -697,6 +697,7 @@
     "baseCents": 20000,
     "carryCents": 40000,
     "spentCents": 6000,
+    "givenUpCents": 0,
     "remainingCents": 54000
    },
    "weeks": [
@@ -705,6 +706,7 @@
      "baseCents": 20000,
      "carryCents": 0,
      "spentCents": 0,
+     "givenUpCents": 0,
      "remainingCents": 20000
     },
     {
@@ -712,6 +714,7 @@
      "baseCents": 20000,
      "carryCents": 20000,
      "spentCents": 0,
+     "givenUpCents": 0,
      "remainingCents": 40000
     },
     {
@@ -719,6 +722,7 @@
      "baseCents": 20000,
      "carryCents": 40000,
      "spentCents": 6000,
+     "givenUpCents": 0,
      "remainingCents": 54000
     }
    ]
@@ -1042,6 +1046,7 @@
     "kind": "assign",
     "moveId": null,
     "receivableId": null,
+    "manualRelease": false,
     "note": "Finanziamento del budget"
    },
    {
@@ -1053,6 +1058,7 @@
     "kind": "assign",
     "moveId": null,
     "receivableId": null,
+    "manualRelease": false,
     "note": "Settimane di budget riservate in anticipo"
    },
    {
@@ -1064,6 +1070,7 @@
     "kind": "assign",
     "moveId": null,
     "receivableId": null,
+    "manualRelease": false,
     "note": "Scadenza finanziata in anticipo"
    }
   ],

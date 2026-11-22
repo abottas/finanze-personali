@@ -69,8 +69,8 @@ test('AVANZO non riportato (impostazione): il fondo torna a 220 e l\'eccedenza t
   s = (await run(s, W1)).state; s = await spend(s, rev, 6000, W1);
   const free = snapshot(s).freeByAccount[rev];
   const out = await run(s, W2); s = out.state;
-  // l'avanzo di 160 NON si aggiunge: la nuova settimana vale 220 in tutto → si aggiungono solo 60
-  assert.equal(out.result.level, 22000); assert.equal(out.result.funded, 6000); assert.equal(fund(s, f), 22000);
+  // l'avanzo di 160 NON si somma: torna libero e la settimana nuova vale 220 in tutto (riservati di nuovo dal libero)
+  assert.equal(out.result.level, 22000); assert.equal(out.result.released, 16000); assert.equal(out.result.funded, 22000); assert.equal(fund(s, f), 22000);
   assert.equal(snapshot(s).freeByAccount[rev], free - 6000);
 });
 test('SFORO: il fondo si esaurisce, il resto esce dal libero; la settimana dopo si finanzia meno', async () => {
@@ -215,11 +215,11 @@ test('il lunedì la settimana corrente si copre con quella già riservata altrov
   // settimana nuova, con riporto spento: il budget è di nuovo 220 e i 14,10 d'avanzo tornano liberi
   s = (await C.updateBudget(s, ctx(), { carryOver: false })).state;
   const out = await run(s, W2); s = out.state;
-  assert.equal(out.result.released, 0); assert.equal(out.result.shortfall, 0); assert.equal(out.result.funded, 0);
-  assert.equal(byAcc(s, f, rev), 1410); assert.equal(byAcc(s, f, buddy), 66000);     // nessun nuovo prelievo: Buddy ha ancora 660
-  assert.deepEqual(pendingTransfers(s, snapshot(s), W2).map((p) => [p.fromAccountId, p.cents]), [[buddy, 20590]]);   // bonifico che porta Revolut a 220 esatti
-  s = (await C.confirmFundTransfer(s, at(W2), { fundId: f, fromAccountId: buddy, toAccountId: rev, cents: 20590, date: W2 })).state;
-  assert.equal(byAcc(s, f, rev), 22000); assert.equal(byAcc(s, f, buddy), 66000 - 20590);   // restano 2 settimane in anticipo, senza obbligo di rifarne una
+  assert.equal(out.result.released, 1410); assert.equal(out.result.shortfall, 0); assert.equal(out.result.funded, 0);   // l'avanzo di 14,10 torna libero
+  assert.equal(byAcc(s, f, rev), 0); assert.equal(byAcc(s, f, buddy), 66000);        // nessun nuovo prelievo: Buddy ha ancora 660
+  assert.deepEqual(pendingTransfers(s, snapshot(s), W2).map((p) => [p.fromAccountId, p.cents]), [[buddy, 22000]]);   // il bonifico copre l'intera settimana (220)
+  s = (await C.confirmFundTransfer(s, at(W2), { fundId: f, fromAccountId: buddy, toAccountId: rev, cents: 22000, date: W2 })).state;
+  assert.equal(byAcc(s, f, rev), 22000); assert.equal(byAcc(s, f, buddy), 44000);   // restano 2 settimane in anticipo, senza obbligo di rifarne una
   assert.equal(pendingTransfers(s, snapshot(s), W2).length, 0);
   assert.deepEqual(budgetWeeksCoverage(s, W2, 4).map((w) => w.funded), [true, true, true, false]);   // calendario: corrente + 2
   const again = await run(s, W2, { force: true });
@@ -297,3 +297,43 @@ test('a metà settimana "Finanzia ora" non riporta il fondo a 220: il livello è
   assert.equal(snapshot(out.state).freeByAccount[rev], snapshot(s).freeByAccount[rev]);   // nessun denaro libero toccato
 });
 
+
+// ───── Avanzo della settimana: rinunciarvi a mano, o farlo tornare libero al lunedì ─────
+test('"Rilascia" a mano l\'avanzo sul conto spese = rinuncia: il residuo scende, nessun bonifico da fare, nessun riporto', async () => {
+  let { s, rev, buddy, f } = await withBuddy(22000);
+  s = (await run(s, W1, { force: true })).state;
+  s = (await C.fundAdvanceWeeks(s, ctx(), { weeks: 1, accountId: buddy })).state;          // 1 settimana in anticipo (220 su Buddy)
+  s = await spend(s, rev, 14909, W1);                                                       // spesi 149,09 → restano 70,91
+  assert.equal(budgetStatus(s, W1).remainingCents, 7091);
+  s = (await C.releaseFromFund(s, ctx(), f, 7091, '', rev)).state;                         // lo porto in liquidità
+  const st = budgetStatus(s, W1);
+  assert.equal(st.remainingCents, 0); assert.equal(st.givenUpCents, 7091);
+  assert.equal(snapshot(s).freeByAccount[rev], 7091);                                       // ora è liquidità libera e spendibile
+  assert.equal(pendingTransfers(s, snapshot(s), W1).length, 0);                             // niente "bonifico da confermare": la settimana non vuole più quel denaro
+  const out = await run(s, W1, { force: true });
+  assert.deepEqual([out.result.funded, out.result.shortfall], [0, 0]); assert.equal(snapshot(out.state).freeByAccount[buddy], snapshot(s).freeByAccount[buddy]);
+  // la settimana dopo l'avanzo rinunciato NON si riporta (anche con il riporto attivo)
+  assert.equal(budgetStatus(out.state, W2).carryCents, 0);
+});
+test('gli sblocchi automatici non sono rinunce: solo il "Rilascia" dell\'utente conta', async () => {
+  let { s, rev, f } = await setup({ cash: 100000 });
+  s = (await run(s, W1, { force: true })).state;
+  s = (await C.updateBudget(s, ctx(), { weeklyCents: 20000 })).state;                       // budget ridotto: l'eccedenza torna libera da sola
+  const out = await run(s, W1, { force: true });
+  assert.equal(out.result.released, 2000); assert.equal(budgetStatus(out.state, W1).givenUpCents, 0);
+});
+test('lunedì con riporto spento: l\'avanzo della settimana scorsa torna libero e il bonifico copre tutta la settimana nuova (220)', async () => {
+  let { s, rev, buddy, f } = await withBuddy(22000);
+  s = (await run(s, W1, { force: true })).state;
+  s = (await C.fundAdvanceWeeks(s, ctx(), { weeks: 2, accountId: buddy })).state;           // 440 su Buddy
+  s = (await C.updateBudget(s, ctx(), { carryOver: false })).state;
+  s = await spend(s, rev, 14909, W1);                                                       // restano 70,91 sul conto spese
+  const freeBefore = snapshot(s).freeByAccount[rev];
+  const out = await run(s, W2); s = out.state;
+  assert.equal(out.result.released, 7091);                                                  // l'avanzo torna libero
+  assert.equal(snapshot(s).freeByAccount[rev], freeBefore + 7091);
+  assert.equal(byAcc(s, f, rev), 0);
+  assert.deepEqual(pendingTransfers(s, snapshot(s), W2).map((p) => [p.fromAccountId, p.cents]), [[buddy, 22000]]);   // il bonifico copre l'intera settimana
+  assert.equal(out.result.funded, 0);
+  assert.deepEqual(validateState(s), []); assert.equal((await runIntegrityChecks(s)).ok, true);
+});

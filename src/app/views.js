@@ -193,7 +193,7 @@ export function viewOverview(app) {
       <h2>Budget della settimana</h2>
       ${bs.baseCents <= 0 ? html`${empty('Budget non impostato', 'Imposta un importo settimanale in Impostazioni → Budget e accantonamenti.')}<button class="btn block" data-nav="settings/budget">Imposta budget</button>` : !bs.started ? html`<div class="muted">Il budget partirà il ${formatDate(st.settings.budget.startDate)}.</div>` : html`
         <div class="row between"><div><div class="small muted">Residuo (${formatDate(bs.weekStart)} – ${formatDate(bs.weekEnd)})</div><div class="num" data-big>${amt(bs.remainingCents, { tone: true })}</div></div>
-        <div class="r small muted">Speso ${amt(bs.spentCents)}<br>su ${amt(bs.baseCents + bs.carryCents)}</div></div>
+        <div class="r small muted">Speso ${amt(bs.spentCents)}<br>su ${amt(bs.baseCents + bs.carryCents)}${bs.givenUpCents ? html`<br>Rinunciati ${amt(bs.givenUpCents)}` : ''}</div></div>
         <div class="bar-wrap">${bar(pctOf(bs.spentCents, bs.baseCents + bs.carryCents), bs.remainingCents < 0 ? 'neg' : bs.remainingCents < (bs.baseCents + bs.carryCents) * 0.2 ? 'warn' : 'pos')}</div>
         ${budgetFundLine(st, snap, bs, today)}
         ${bs.carryCents !== 0 ? html`<div class="small muted">${bs.carryCents > 0 ? 'Avanzo riportato' : 'Disavanzo riportato'}: ${amt(bs.carryCents, { plus: true })}</div>` : ''}`}
